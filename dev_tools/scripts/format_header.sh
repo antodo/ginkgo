@@ -24,15 +24,13 @@ get_core_name () {
     LISTS=$(find include/ginkgo/core -type f)
     # special case
     LISTS="$(find core/test/utils -type f -name "*.hpp")"$'\n'"${LISTS}"
-    CORE="false"
-    CORE_REGEX=" ([a-zA-Z\/\_]*)\.cpp\)?"
     MIN_DISTANCE="-1"
     MATCH=""
     while IFS='' read -r line; do
         line=$(echo "${line}" | sed -E "s/include\/ginkgo\///g;s/core\///g;s/\.hpp//g")
         if [[ "$@" =~ "${line}" ]]; then 
-            distance=$(( $(expr length $@) - $(expr length $@) ))
-            if [[ -z "${MATCH}" ]] || [[ ${distance} < ${line} ]]; then
+            distance=$(( $(expr length $@) - $(expr length ${line}) ))
+            if [[ -z "${MATCH}" ]] || [[ ${distance} -lt ${MIN_DISTANCE} ]]; then
                 MATCH="${line}"
                 MIN_DISTANCE="${distance}"
             fi
@@ -52,33 +50,29 @@ HAS_HIP_RUNTIME="false"
 DURING_LICENSE="false"
 DURING_CONTENT="false"
 MAIN_INCLUDE=""
-MAIN_PART_MATCH=$(echo $1 | sed -E "s/^(core|cuda|hip|reference)\///g;s/^test\///g;s/\.(cpp|hpp|hip\.cpp|hip\.hpp|cuh|cu)//g")
-echo ${MAIN_PART_MATCH}
 
 Style="\"{"
 Style="${Style} Language: Cpp,"
-Style="${Style} SortIncludes:    true,"
+Style="${Style} SortIncludes: true,"
 Style="${Style} IncludeBlocks: Regroup,"
 Style="${Style} IncludeCategories: ["
-Style="${Style} {Regex:           '^(<)(omp|cu|hip|rapidjson|gflags|gtest|thrust).*',"
-Style="${Style} Priority:        2},"
-Style="${Style} {Regex:           '^<ginkgo.*', "
-Style="${Style} Priority:        4},"
-Style="${Style} {Regex:           '^\\\".*',"
-Style="${Style} Priority:        5},"
-Style="${Style} {Regex:           '.*',"
-Style="${Style} Priority:        1}"
+Style="${Style} {Regex: '^(<)(omp|cu|hip|rapidjson|gflags|gtest|thrust).*',"
+Style="${Style}  Priority: 2},"
+Style="${Style} {Regex: '^<ginkgo.*', "
+Style="${Style}  Priority: 4},"
+Style="${Style} {Regex: '^\\\".*',"
+Style="${Style}  Priority: 5},"
+Style="${Style} {Regex: '.*',"
+Style="${Style}  Priority: 1}"
 Style="${Style} ],"
 Style="${Style} MaxEmptyLinesToKeep: 2,"
 Style="${Style} SpacesBeforeTrailingComments: 2,"
-Style="${Style} IndentWidth:     4,"
+Style="${Style} IndentWidth: 4,"
 Style="${Style} AlignEscapedNewlines: Left"
 Style="${Style} }\""
 FORMAT_COMMAND="clang-format -i -style=${Style}"
 
-# delete _test for assertions_test and matrix_generator_test
 CORE_NAME="$(get_core_name $1)"
-echo "~~ ${CORE_NAME}"
 TEST_REGEX="_test(\.hip)?\.(cpp|hpp|cuh|cu)"
 SELF=$(echo $1 | sed -E "s/\.cpp/\.hpp/g;s/\.cu/\.cuh/g")
 if [[ ! $1 =~ ${TEST_REGEX} ]]; then
@@ -94,8 +88,6 @@ fi
 SELF_REGEX="^#include  (<|\")${SELF}(\"|>)$"
 INCLUDE_REGEX="^#include.*"
 MAIN_PART_MATCH="^#include ${MAIN_PART_MATCH}"
-echo "+++ ${MAIN_PART_MATCH}"
-SHAPE="^#"
 RECORD_HEADER=0
 IFNDEF="^#ifndef"
 DEFINE="^#define"
@@ -104,7 +96,6 @@ NAMESPACE="^namespace"
 compute_score() {
     # $1 filename
     # $2 include
-    echo "$1 $2"
     if [[ "$2" =~ ${SELF_REGEX} ]]; then
         return 300
     elif [[ "$1" =~ core|test ]] && [[ "$2" =~ ginkgo ]]; then
@@ -137,7 +128,6 @@ while IFS='' read -r line; do
             echo "${line}" >> ${BEFORE}
             RECORD_HEADER=$((RECORD_HEADER+1))
         elif [[ "${line}" =~ ${MAIN_PART_MATCH} ]]; then
-            # echo "${line}"
             if [ -f ${BEFORE} ] && [[ -z "${MAIN_INCLUDE}" ]]; then
                 echo "" >> ${BEFORE}
                 echo "" >> ${BEFORE}
@@ -149,14 +139,11 @@ while IFS='' read -r line; do
                 MAIN_INCLUDE="${line}"
                 compute_score "$1" "${line}"
                 SCORE=$?
-                echo "${line} ${SCORE}"
                 echo "${line}" >> ${BEFORE}
             elif [[ ! "${MAIN_INCLUDE}" = "${line}" ]]; then
                 compute_score "$1" "${line}"
                 score=$?
-                echo "${line} ${score} ${SCORE}"
                 if [[ ${score} -gt ${SCORE} ]]; then
-                    echo "change"
                     sed -i -E "s~${MAIN_INCLUDE}~${line}~g" ${BEFORE}
                     echo "${MAIN_INCLUDE}" >> ${HEADER}
                     SCORE=${score}
