@@ -11,6 +11,7 @@ target_sources(ginkgo
         base/perturbation.cpp
         base/version.cpp
         factorization/par_ilu.cpp
+        factorization/par_ilut.cpp
         log/convergence.cpp
         log/logger.cpp
         log/record.cpp
