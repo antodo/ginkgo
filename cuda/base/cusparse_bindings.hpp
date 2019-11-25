@@ -459,6 +459,215 @@ GKO_BIND_CUSPARSE_SPGEMM(std::complex<double>, cusparseZcsrgemm2);
 #undef GKO_BIND_CUSPARSE_SPGEMM
 
 
+template <typename IndexType, typename ValueType>
+void spgeam_buffer_size(
+    cusparseHandle_t handle, IndexType m, IndexType n, const ValueType *alpha,
+    const cusparseMatDescr_t descrA, IndexType nnzA,
+    const ValueType *csrSortedValA, const IndexType *csrSortedRowPtrA,
+    const IndexType *csrSortedColIndA, const ValueType *beta,
+    const cusparseMatDescr_t descrB, IndexType nnzB,
+    const ValueType *csrSortedValB, const IndexType *csrSortedRowPtrB,
+    const IndexType *csrSortedColIndB, const cusparseMatDescr_t descrC,
+    const ValueType *csrSortedValC, const IndexType *csrSortedRowPtrC,
+    const IndexType *csrSortedColIndC, size_type &result) GKO_NOT_IMPLEMENTED;
+
+
+template <typename IndexType>
+void spgeam_nnz(cusparseHandle_t handle, IndexType m, IndexType n,
+                const cusparseMatDescr_t descrA, IndexType nnzA,
+                const IndexType *csrSortedRowPtrA,
+                const IndexType *csrSortedColIndA,
+                const cusparseMatDescr_t descrB, IndexType nnzB,
+                const IndexType *csrSortedRowPtrB,
+                const IndexType *csrSortedColIndB,
+                const cusparseMatDescr_t descrC, IndexType *csrSortedRowPtrC,
+                IndexType *nnzC, void *buffer) GKO_NOT_IMPLEMENTED;
+
+
+template <typename IndexType, typename ValueType>
+void spgeam(cusparseHandle_t handle, IndexType m, IndexType n,
+            const ValueType *alpha, const cusparseMatDescr_t descrA,
+            IndexType nnzA, const ValueType *csrSortedValA,
+            const IndexType *csrSortedRowPtrA,
+            const IndexType *csrSortedColIndA, const ValueType *beta,
+            const cusparseMatDescr_t descrB, IndexType nnzB,
+            const ValueType *csrSortedValB, const IndexType *csrSortedRowPtrB,
+            const IndexType *csrSortedColIndB, const cusparseMatDescr_t descrC,
+            ValueType *csrSortedValC, IndexType *csrSortedRowPtrC,
+            IndexType *csrSortedColIndC, void *buffer) GKO_NOT_IMPLEMENTED;
+
+
+// CUDA versions 9.2 and above have csrgeam2.
+#if (defined(CUDA_VERSION) && (CUDA_VERSION >= 9020))
+
+#define GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(ValueType, CusparseName)          \
+    template <>                                                                \
+    inline void spgeam_buffer_size<int32, ValueType>(                          \
+        cusparseHandle_t handle, int32 m, int32 n, const ValueType *alpha,     \
+        const cusparseMatDescr_t descrA, int32 nnzA,                           \
+        const ValueType *csrSortedValA, const int32 *csrSortedRowPtrA,         \
+        const int32 *csrSortedColIndA, const ValueType *beta,                  \
+        const cusparseMatDescr_t descrB, int32 nnzB,                           \
+        const ValueType *csrSortedValB, const int32 *csrSortedRowPtrB,         \
+        const int32 *csrSortedColIndB, const cusparseMatDescr_t descrC,        \
+        const ValueType *csrSortedValC, const int32 *csrSortedRowPtrC,         \
+        const int32 *csrSortedColIndC, size_type &result)                      \
+    {                                                                          \
+        GKO_ASSERT_NO_CUSPARSE_ERRORS(CusparseName(                            \
+            handle, m, n, as_culibs_type(alpha), descrA, nnzA,                 \
+            as_culibs_type(csrSortedValA), csrSortedRowPtrA, csrSortedColIndA, \
+            as_culibs_type(beta), descrB, nnzB, as_culibs_type(csrSortedValB), \
+            csrSortedRowPtrB, csrSortedColIndB, descrC,                        \
+            as_culibs_type(csrSortedValC), csrSortedRowPtrC, csrSortedColIndC, \
+            &result));                                                         \
+    }                                                                          \
+    static_assert(true,                                                        \
+                  "This assert is used to counter the false positive extra "   \
+                  "semi-colon warnings")
+
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(float, cusparseScsrgeam2_bufferSizeExt);
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(double, cusparseDcsrgeam2_bufferSizeExt);
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(std::complex<float>,
+                                     cusparseCcsrgeam2_bufferSizeExt);
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(std::complex<double>,
+                                     cusparseZcsrgeam2_bufferSizeExt);
+
+
+#undef GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE
+
+
+template <>
+inline void spgeam_nnz<int32>(
+    cusparseHandle_t handle, int32 m, int32 n, const cusparseMatDescr_t descrA,
+    int32 nnzA, const int32 *csrSortedRowPtrA, const int32 *csrSortedColIndA,
+    const cusparseMatDescr_t descrB, int32 nnzB, const int32 *csrSortedRowPtrB,
+    const int32 *csrSortedColIndB, const cusparseMatDescr_t descrC,
+    int32 *csrSortedRowPtrC, int32 *nnzC, void *buffer)
+{
+    GKO_ASSERT_NO_CUSPARSE_ERRORS(cusparseXcsrgeam2Nnz(
+        handle, m, n, descrA, nnzA, csrSortedRowPtrA, csrSortedColIndA, descrB,
+        nnzB, csrSortedRowPtrB, csrSortedColIndB, descrC, csrSortedRowPtrC,
+        nnzC, buffer));
+}
+
+
+#define GKO_BIND_CUSPARSE_SPGEAM(ValueType, CusparseName)                      \
+    template <>                                                                \
+    inline void spgeam<int32, ValueType>(                                      \
+        cusparseHandle_t handle, int32 m, int32 n, const ValueType *alpha,     \
+        const cusparseMatDescr_t descrA, int32 nnzA,                           \
+        const ValueType *csrSortedValA, const int32 *csrSortedRowPtrA,         \
+        const int32 *csrSortedColIndA, const ValueType *beta,                  \
+        const cusparseMatDescr_t descrB, int32 nnzB,                           \
+        const ValueType *csrSortedValB, const int32 *csrSortedRowPtrB,         \
+        const int32 *csrSortedColIndB, const cusparseMatDescr_t descrC,        \
+        ValueType *csrSortedValC, int32 *csrSortedRowPtrC,                     \
+        int32 *csrSortedColIndC, void *buffer)                                 \
+    {                                                                          \
+        GKO_ASSERT_NO_CUSPARSE_ERRORS(CusparseName(                            \
+            handle, m, n, as_culibs_type(alpha), descrA, nnzA,                 \
+            as_culibs_type(csrSortedValA), csrSortedRowPtrA, csrSortedColIndA, \
+            as_culibs_type(beta), descrB, nnzB, as_culibs_type(csrSortedValB), \
+            csrSortedRowPtrB, csrSortedColIndB, descrC,                        \
+            as_culibs_type(csrSortedValC), csrSortedRowPtrC, csrSortedColIndC, \
+            buffer));                                                          \
+    }                                                                          \
+    static_assert(true,                                                        \
+                  "This assert is used to counter the false positive extra "   \
+                  "semi-colon warnings")
+
+GKO_BIND_CUSPARSE_SPGEAM(float, cusparseScsrgeam2);
+GKO_BIND_CUSPARSE_SPGEAM(double, cusparseDcsrgeam2);
+GKO_BIND_CUSPARSE_SPGEAM(std::complex<float>, cusparseCcsrgeam2);
+GKO_BIND_CUSPARSE_SPGEAM(std::complex<double>, cusparseZcsrgeam2);
+
+
+#undef GKO_BIND_CUSPARSE_SPGEAM
+#endif
+
+
+// CUDA versions older than 9.2 need to use csrgeam.
+#if (defined(CUDA_VERSION) && (CUDA_VERSION < 9020))
+
+// csrgeam doesn't use an externally allocated buffer
+#define GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(ValueType)                      \
+    template <>                                                              \
+    inline void spgeam_buffer_size<int32, ValueType>(                        \
+        cusparseHandle_t handle, int32 m, int32 n, const ValueType *alpha,   \
+        const cusparseMatDescr_t descrA, int32 nnzA,                         \
+        const ValueType *csrSortedValA, const int32 *csrSortedRowPtrA,       \
+        const int32 *csrSortedColIndA, const ValueType *beta,                \
+        const cusparseMatDescr_t descrB, int32 nnzB,                         \
+        const ValueType *csrSortedValB, const int32 *csrSortedRowPtrB,       \
+        const int32 *csrSortedColIndB, const cusparseMatDescr_t descrC,      \
+        const ValueType *csrSortedValC, const int32 *csrSortedRowPtrC,       \
+        const int32 *csrSortedColIndC, size_type &result)                    \
+    {                                                                        \
+        result = 0;                                                          \
+    }                                                                        \
+    static_assert(true,                                                      \
+                  "This assert is used to counter the false positive extra " \
+                  "semi-colon warnings")
+
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(float);
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(double);
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(std::complex<float>);
+GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE(std::complex<double>);
+
+
+#undef GKO_BIND_CUSPARSE_SPGEAM_BUFFER_SIZE
+
+
+template <>
+inline void spgeam_nnz<int32>(
+    cusparseHandle_t handle, int32 m, int32 n, const cusparseMatDescr_t descrA,
+    int32 nnzA, const int32 *csrSortedRowPtrA, const int32 *csrSortedColIndA,
+    const cusparseMatDescr_t descrB, int32 nnzB, const int32 *csrSortedRowPtrB,
+    const int32 *csrSortedColIndB, const cusparseMatDescr_t descrC,
+    int32 *csrSortedRowPtrC, int32 *nnzC, void *buffer)
+{
+    GKO_ASSERT_NO_CUSPARSE_ERRORS(
+        cusparseXcsrgeamNnz(handle, m, n, descrA, nnzA, csrSortedRowPtrA,
+                            csrSortedColIndA, descrB, nnzB, csrSortedRowPtrB,
+                            csrSortedColIndB, descrC, csrSortedRowPtrC, nnzC));
+}
+
+
+#define GKO_BIND_CUSPARSE_SPGEAM(ValueType, CusparseName)                      \
+    template <>                                                                \
+    inline void spgeam<int32, ValueType>(                                      \
+        cusparseHandle_t handle, int32 m, int32 n, const ValueType *alpha,     \
+        const cusparseMatDescr_t descrA, int32 nnzA,                           \
+        const ValueType *csrSortedValA, const int32 *csrSortedRowPtrA,         \
+        const int32 *csrSortedColIndA, const ValueType *beta,                  \
+        const cusparseMatDescr_t descrB, int32 nnzB,                           \
+        const ValueType *csrSortedValB, const int32 *csrSortedRowPtrB,         \
+        const int32 *csrSortedColIndB, const cusparseMatDescr_t descrC,        \
+        ValueType *csrSortedValC, int32 *csrSortedRowPtrC,                     \
+        int32 *csrSortedColIndC, void *buffer)                                 \
+    {                                                                          \
+        GKO_ASSERT_NO_CUSPARSE_ERRORS(CusparseName(                            \
+            handle, m, n, as_culibs_type(alpha), descrA, nnzA,                 \
+            as_culibs_type(csrSortedValA), csrSortedRowPtrA, csrSortedColIndA, \
+            as_culibs_type(beta), descrB, nnzB, as_culibs_type(csrSortedValB), \
+            csrSortedRowPtrB, csrSortedColIndB, descrC,                        \
+            as_culibs_type(csrSortedValC), csrSortedRowPtrC,                   \
+            csrSortedColIndC));                                                \
+    }                                                                          \
+    static_assert(true,                                                        \
+                  "This assert is used to counter the false positive extra "   \
+                  "semi-colon warnings")
+
+GKO_BIND_CUSPARSE_SPGEAM(float, cusparseScsrgeam);
+GKO_BIND_CUSPARSE_SPGEAM(double, cusparseDcsrgeam);
+GKO_BIND_CUSPARSE_SPGEAM(std::complex<float>, cusparseCcsrgeam);
+GKO_BIND_CUSPARSE_SPGEAM(std::complex<double>, cusparseZcsrgeam);
+
+
+#undef GKO_BIND_CUSPARSE_SPGEAM
+#endif
+
+
 #define GKO_BIND_CUSPARSE32_CSR2HYB(ValueType, CusparseName)                 \
     inline void csr2hyb(cusparseHandle_t handle, int32 m, int32 n,           \
                         const cusparseMatDescr_t descrA,                     \

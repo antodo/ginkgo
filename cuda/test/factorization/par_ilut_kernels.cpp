@@ -36,6 +36,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <algorithm>
 #include <fstream>
 #include <memory>
+#include <random>
 #include <string>
 
 
@@ -65,13 +66,70 @@ protected:
     using Csr = gko::matrix::Csr<value_type, index_type>;
 
     ParIlut()
-        : ref(gko::ReferenceExecutor::create()),
+        : mtx_size(532, 423),
+          rand_engine(1337),
+          ref(gko::ReferenceExecutor::create()),
           cuda(gko::CudaExecutor::create(0, ref))
-    {}
+    {
+        mtx1 = gko::test::generate_random_matrix<Csr>(
+            mtx_size[0], mtx_size[1],
+            std::uniform_int_distribution<>(10, mtx_size[1]),
+            std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
+        mtx2 = gko::test::generate_random_matrix<Csr>(
+            mtx_size[0], mtx_size[1],
+            std::uniform_int_distribution<>(0, mtx_size[1]),
+            std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
+        alpha = gko::initialize<Dense>({1.0}, ref);
+        beta = gko::initialize<Dense>({-2.0}, ref);
+
+        dmtx1 = Csr::create(cuda);
+        dmtx1->copy_from(mtx1.get());
+        dmtx2 = Csr::create(cuda);
+        dmtx2->copy_from(mtx2.get());
+        dalpha = Dense::create(cuda);
+        dalpha->copy_from(alpha.get());
+        dbeta = Dense::create(cuda);
+        dbeta->copy_from(beta.get());
+    }
 
     std::shared_ptr<gko::ReferenceExecutor> ref;
     std::shared_ptr<gko::CudaExecutor> cuda;
+
+    const gko::dim<2> mtx_size;
+    std::default_random_engine rand_engine;
+
+    std::unique_ptr<Csr> mtx1;
+    std::unique_ptr<Csr> mtx2;
+    std::unique_ptr<Dense> alpha;
+    std::unique_ptr<Dense> beta;
+
+    std::unique_ptr<Csr> dmtx1;
+    std::unique_ptr<Csr> dmtx2;
+    std::unique_ptr<Dense> dalpha;
+    std::unique_ptr<Dense> dbeta;
 };
 
+
+TEST_F(ParIlut, CudaKernelSpGeAMIsEquivalentToRef)
+{
+    gko::Array<index_type> new_row_ptrs(ref);
+    gko::Array<index_type> new_col_idxs(ref);
+    gko::Array<value_type> new_vals(ref);
+    gko::Array<index_type> dnew_row_ptrs(cuda);
+    gko::Array<index_type> dnew_col_idxs(cuda);
+    gko::Array<value_type> dnew_vals(cuda);
+
+    gko::kernels::reference::par_ilut_factorization::spgeam(
+        ref, alpha.get(), mtx1.get(), beta.get(), mtx2.get(), new_row_ptrs,
+        new_col_idxs, new_vals);
+    gko::kernels::cuda::par_ilut_factorization::spgeam(
+        cuda, dalpha.get(), dmtx1.get(), dbeta.get(), dmtx2.get(),
+        dnew_row_ptrs, dnew_col_idxs, dnew_vals);
+    auto res = Csr::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
+    auto dres =
+        Csr::create(cuda, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
+
+    GKO_ASSERT_MTX_NEAR(res, dres, 1e-14);
+}
 
 }  // namespace
