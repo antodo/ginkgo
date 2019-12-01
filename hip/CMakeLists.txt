@@ -104,6 +104,7 @@ set(GINKGO_HIP_SOURCES
     matrix/sellp_kernels.hip.cpp
     matrix/sparsity_csr_kernels.hip.cpp
     preconditioner/jacobi_kernels.hip.cpp
+    reorder/rcm_kernels.hip.cpp
     solver/bicgstab_kernels.hip.cpp
     solver/cg_kernels.hip.cpp
     solver/cgs_kernels.hip.cpp

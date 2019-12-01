@@ -1,0 +1,1 @@
+ginkgo_create_metis_test(rcm_kernels)

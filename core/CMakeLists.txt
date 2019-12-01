@@ -25,6 +25,7 @@ target_sources(ginkgo
         matrix/sellp.cpp
         matrix/sparsity_csr.cpp
         preconditioner/jacobi.cpp
+        reorder/rcm.cpp
         solver/bicgstab.cpp
         solver/cg.cpp
         solver/cgs.cpp
