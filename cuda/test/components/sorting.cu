@@ -115,7 +115,7 @@ protected:
 };
 
 
-TEST_F(Sorting, CudaBitonicSortWarp)
+TEST_F(Sorting, BitonicSortWarp)
 {
     test_sort_warp<<<1, config::warp_size>>>(ddata.get_data());
     ddata.set_executor(ref);
@@ -127,7 +127,7 @@ TEST_F(Sorting, CudaBitonicSortWarp)
 }
 
 
-TEST_F(Sorting, CudaBitonicSortShared)
+TEST_F(Sorting, BitonicSortShared)
 {
     test_sort_shared<<<1, num_threads>>>(ddata.get_data());
     ddata.set_executor(ref);

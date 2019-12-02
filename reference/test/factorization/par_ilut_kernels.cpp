@@ -216,10 +216,10 @@ TEST_F(ParIlut, KernelThresholdFilterNone)
     gko::Array<index_type> new_row_ptrs(exec);
     gko::Array<index_type> new_col_idxs(exec);
     gko::Array<value_type> new_vals(exec);
+    auto threshold = 0.1;
 
-    // the 5th-smallest entry is equal to the smallest entry, so remove nothing
     gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), 4, new_row_ptrs, new_col_idxs, new_vals);
+        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
     auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
                                new_row_ptrs);
 
@@ -233,11 +233,10 @@ TEST_F(ParIlut, KernelThresholdFilterSomeAtThreshold)
     gko::Array<index_type> new_row_ptrs(exec);
     gko::Array<index_type> new_col_idxs(exec);
     gko::Array<value_type> new_vals(exec);
+    auto threshold = 2.0;
 
-    // the 12th-smallest entry is smaller than the 13th-smallest, so we remove
-    // all entries less or equal 1.0 in magnitude
     gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), 12, new_row_ptrs, new_col_idxs, new_vals);
+        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
     auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
                                new_row_ptrs);
 
@@ -251,10 +250,10 @@ TEST_F(ParIlut, KernelThresholdFilterSomeAboveThreshold)
     gko::Array<index_type> new_row_ptrs(exec);
     gko::Array<index_type> new_col_idxs(exec);
     gko::Array<value_type> new_vals(exec);
+    auto threshold = 3.0;
 
-    // filtering all entries is not possible, as the largest one is always kept
     gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), 15, new_row_ptrs, new_col_idxs, new_vals);
+        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
     auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
                                new_row_ptrs);
 

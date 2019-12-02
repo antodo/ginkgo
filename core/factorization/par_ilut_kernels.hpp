@@ -48,11 +48,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace gko {
 namespace kernels {
 
-
+#define GKO_DECLARE_PAR_ILUT_THRESHOLD_SELECT_KERNEL(ValueType, IndexType)    \
+    remove_complex<ValueType> threshold_select(                               \
+        std::shared_ptr<const DefaultExecutor> exec, const ValueType *values, \
+        IndexType size, IndexType rank)
 #define GKO_DECLARE_PAR_ILUT_THRESHOLD_FILTER_KERNEL(ValueType, IndexType) \
     void threshold_filter(std::shared_ptr<const DefaultExecutor> exec,     \
                           const matrix::Csr<ValueType, IndexType> *a,      \
-                          IndexType target_size,                           \
+                          remove_complex<ValueType> threshold,             \
                           Array<IndexType> &new_row_ptrs_array,            \
                           Array<IndexType> &new_col_idxs_array,            \
                           Array<ValueType> &new_vals_array)
@@ -67,6 +70,8 @@ namespace kernels {
                 Array<ValueType> &c_vals_array)
 
 #define GKO_DECLARE_ALL_AS_TEMPLATES                                    \
+    template <typename ValueType, typename IndexType>                   \
+    GKO_DECLARE_PAR_ILUT_THRESHOLD_SELECT_KERNEL(ValueType, IndexType); \
     template <typename ValueType, typename IndexType>                   \
     GKO_DECLARE_PAR_ILUT_THRESHOLD_FILTER_KERNEL(ValueType, IndexType); \
     template <typename ValueType, typename IndexType>                   \
