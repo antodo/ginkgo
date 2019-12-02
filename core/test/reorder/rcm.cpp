@@ -40,7 +40,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include <ginkgo/core/base/executor.hpp>
-#include <ginkgo/core/base/metis_types.hpp>
 #include <ginkgo/core/matrix/dense.hpp>
 
 
@@ -50,7 +49,7 @@ namespace {
 class Rcm : public ::testing::Test {
 protected:
     using v_type = double;
-    using i_type = metis_indextype;
+    using i_type = int;
     using Mtx = gko::matrix::Dense<v_type>;
     using reorder_factory_type = gko::reorder::Rcm<v_type, i_type>;
 
