@@ -318,7 +318,7 @@ TEST_F(ParIlut, KernelComplexThresholdFilterNoneIsEquivalentToRef)
 }
 
 
-TEST_F(ParIlut, DISABLED_KernelSpGeAMIsEquivalentToRef)
+TEST_F(ParIlut, KernelSpGeAMIsEquivalentToRef)
 {
     gko::Array<index_type> new_row_ptrs(ref);
     gko::Array<index_type> new_col_idxs(ref);

@@ -256,8 +256,59 @@ void spgeam(std::shared_ptr<const HipExecutor> exec,
             const matrix::Dense<ValueType> *beta,
             const matrix::Csr<ValueType, IndexType> *b,
             Array<IndexType> &c_row_ptrs_array,
-            Array<IndexType> &c_col_idxs_array,
-            Array<ValueType> &c_vals_array) GKO_NOT_IMPLEMENTED;
+            Array<IndexType> &c_col_idxs_array, Array<ValueType> &c_vals_array)
+{
+    ValueType valpha{};
+    exec->get_master()->copy_from(exec.get(), 1, alpha->get_const_values(),
+                                  &valpha);
+    auto a_nnz = IndexType(a->get_num_stored_elements());
+    auto a_vals = a->get_const_values();
+    auto a_row_ptrs = a->get_const_row_ptrs();
+    auto a_col_idxs = a->get_const_col_idxs();
+    ValueType vbeta{};
+    exec->get_master()->copy_from(exec.get(), 1, beta->get_const_values(),
+                                  &vbeta);
+    auto b_nnz = IndexType(b->get_num_stored_elements());
+    auto b_vals = b->get_const_values();
+    auto b_row_ptrs = b->get_const_row_ptrs();
+    auto b_col_idxs = b->get_const_col_idxs();
+    auto num_rows = IndexType(a->get_size()[0]);
+
+    // count non-zeros per row
+    c_row_ptrs_array.resize_and_reset(num_rows + 1);
+    auto c_row_ptrs = c_row_ptrs_array.get_data();
+    auto num_blocks = ceildiv(num_rows, default_block_size);
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(kernel::spgeam_nnz), dim3(num_blocks),
+                       dim3(default_block_size), 0, 0, a_row_ptrs, a_col_idxs,
+                       b_row_ptrs, b_col_idxs, num_rows, c_row_ptrs);
+
+    // build row pointers
+    auto num_row_ptrs = num_rows + 1;
+    auto num_reduce_blocks = ceildiv(num_row_ptrs, default_block_size);
+    Array<IndexType> block_counts_array(exec, num_blocks);
+    auto block_counts = block_counts_array.get_data();
+
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(start_prefix_sum<default_block_size>),
+                       dim3(num_reduce_blocks), dim3(default_block_size), 0, 0,
+                       num_row_ptrs, c_row_ptrs, block_counts);
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(finalize_prefix_sum<default_block_size>),
+                       dim3(num_reduce_blocks), dim3(default_block_size), 0, 0,
+                       num_row_ptrs, c_row_ptrs, block_counts);
+
+    // build matrix
+    IndexType c_nnz{};
+    exec->get_master()->copy_from(exec.get(), 1, c_row_ptrs + num_rows, &c_nnz);
+    c_col_idxs_array.resize_and_reset(c_nnz);
+    c_vals_array.resize_and_reset(c_nnz);
+    auto c_col_idxs = c_col_idxs_array.get_data();
+    auto c_vals = c_vals_array.get_data();
+    hipLaunchKernelGGL(HIP_KERNEL_NAME(kernel::spgeam), dim3(num_blocks),
+                       dim3(default_block_size), 0, 0, as_hip_type(valpha),
+                       a_row_ptrs, a_col_idxs, as_hip_type(a_vals),
+                       as_hip_type(vbeta), b_row_ptrs, b_col_idxs,
+                       as_hip_type(b_vals), num_rows, c_row_ptrs, c_col_idxs,
+                       as_hip_type(c_vals));
+}
 
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(

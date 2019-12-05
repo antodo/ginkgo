@@ -344,7 +344,7 @@ __global__ __launch_bounds__(default_block_size) void spgeam(
     const IndexType *b_col_idxs, const ValueType *b_vals, IndexType num_rows,
     const IndexType *c_row_ptrs, IndexType *c_col_idxs, ValueType *c_vals)
 {
-    constexpr auto sentinel = sentinel_helper<IndexType>::value;
+    constexpr auto sentinel = sentinel_helper<IndexType>::max;
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
         return;
@@ -375,11 +375,11 @@ __global__ __launch_bounds__(default_block_size) void spgeam(
         c_val = zero<ValueType>();
         if (advance_a) {
             a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
-            c_val += alpha * a_vals[a_ptr];
+            c_val += alpha * a_vals[a_ptr - 1];
         }
         if (advance_b) {
             b_col = b_ptr < b_end ? b_col_idxs[b_ptr] : sentinel;
-            c_val += beta * b_vals[b_ptr];
+            c_val += beta * b_vals[b_ptr - 1];
         }
         c_col_idxs[c_begin + count] = c_col;
         c_vals[c_begin + count] = c_val;
