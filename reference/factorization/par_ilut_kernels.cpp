@@ -176,12 +176,8 @@ void spgeam(std::shared_ptr<const ReferenceExecutor> exec,
     std::unordered_set<IndexType> local_col_idxs;
     for (size_type row = 0; row < num_rows; ++row) {
         local_col_idxs.clear();
-        if (valpha != zero(valpha)) {
-            spgeam_insert_row(local_col_idxs, a, row);
-        }
-        if (vbeta != zero(vbeta)) {
-            spgeam_insert_row(local_col_idxs, b, row);
-        }
+        spgeam_insert_row(local_col_idxs, a, row);
+        spgeam_insert_row(local_col_idxs, b, row);
         c_row_ptrs[row + 1] = local_col_idxs.size();
     }
 
@@ -199,12 +195,8 @@ void spgeam(std::shared_ptr<const ReferenceExecutor> exec,
     std::unordered_map<IndexType, ValueType> local_row_nzs;
     for (size_type row = 0; row < num_rows; ++row) {
         local_row_nzs.clear();
-        if (valpha != zero(valpha)) {
-            spgeam_accumulate_row(local_row_nzs, a, valpha, row);
-        }
-        if (vbeta != zero(vbeta)) {
-            spgeam_accumulate_row(local_row_nzs, b, vbeta, row);
-        }
+        spgeam_accumulate_row(local_row_nzs, a, valpha, row);
+        spgeam_accumulate_row(local_row_nzs, b, vbeta, row);
         // store result
         auto c_nz = c_row_ptrs[row];
         for (auto pair : local_row_nzs) {
