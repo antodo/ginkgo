@@ -242,7 +242,8 @@ TEST_F(ParIlut, KernelThresholdFilterIsEquivalentToRef)
     auto dres =
         Csr::create(cuda, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR_SPARSITY(res, dres, 0);
+    GKO_ASSERT_MTX_NEAR(res, dres, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
 }
 
 
@@ -264,7 +265,8 @@ TEST_F(ParIlut, KernelThresholdFilterNoneIsEquivalentToRef)
     auto dres =
         Csr::create(cuda, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR_SPARSITY(res, dres, 0);
+    GKO_ASSERT_MTX_NEAR(res, dres, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
 }
 
 
@@ -289,7 +291,8 @@ TEST_F(ParIlut, KernelComplexThresholdFilterIsEquivalentToRef)
     auto dres = ComplexCsr::create(cuda, mtx_size, dnew_vals, dnew_col_idxs,
                                    dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR_SPARSITY(res, dres, 0);
+    GKO_ASSERT_MTX_NEAR(res, dres, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
 }
 
 
@@ -314,7 +317,8 @@ TEST_F(ParIlut, KernelComplexThresholdFilterNoneIsEquivalentToRef)
     auto dres = ComplexCsr::create(cuda, mtx_size, dnew_vals, dnew_col_idxs,
                                    dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR_SPARSITY(res, dres, 0);
+    GKO_ASSERT_MTX_NEAR(res, dres, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
 }
 
 
@@ -337,7 +341,8 @@ TEST_F(ParIlut, KernelSpGeAMIsEquivalentToRef)
     auto dres =
         Csr::create(cuda, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR_SPARSITY(res, dres, 1e-14);
+    GKO_ASSERT_MTX_NEAR(res, dres, 1e-14);
+    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
 }
 
 }  // namespace
