@@ -58,7 +58,7 @@ namespace kernels {
                           remove_complex<ValueType> threshold,             \
                           Array<IndexType> &new_row_ptrs_array,            \
                           Array<IndexType> &new_col_idxs_array,            \
-                          Array<ValueType> &new_vals_array)
+                          Array<ValueType> &new_vals_array, bool is_lower)
 #define GKO_DECLARE_PAR_ILUT_SPGEAM_KERNEL(ValueType, IndexType) \
     void spgeam(std::shared_ptr<const DefaultExecutor> exec,     \
                 const matrix::Dense<ValueType> *alpha,           \

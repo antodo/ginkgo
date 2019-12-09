@@ -246,7 +246,7 @@ __global__ __launch_bounds__(basecase_block_size) void basecase_select(
 template <typename IndexType, typename ValueType>
 __global__ __launch_bounds__(default_block_size) void threshold_filter_nnz(
     const IndexType *row_ptrs, const ValueType *vals, IndexType num_rows,
-    remove_complex<ValueType> threshold, IndexType *nnz)
+    remove_complex<ValueType> threshold, IndexType *nnz, bool is_lower)
 {
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
@@ -254,10 +254,16 @@ __global__ __launch_bounds__(default_block_size) void threshold_filter_nnz(
     }
 
     IndexType count{};
-    for (auto i = row_ptrs[row]; i < row_ptrs[row + 1]; ++i) {
+    // ignoring diagonal entries:
+    // lower triangular part has the diagonal last
+    // upper triangular part has the diagonal first
+    auto begin = row_ptrs[row] + !is_lower;
+    auto end = row_ptrs[row + 1] - is_lower;
+    for (auto i = begin; i < end; ++i) {
         count += abs(vals[i]) >= threshold;
     }
-    nnz[row] = count;
+    // add the diagonal entry
+    nnz[row] = count + 1;
 }
 
 
@@ -266,7 +272,7 @@ __global__ __launch_bounds__(default_block_size) void threshold_filter(
     const IndexType *old_row_ptrs, const IndexType *old_col_idxs,
     const ValueType *old_vals, IndexType num_rows,
     remove_complex<ValueType> threshold, const IndexType *new_row_ptrs,
-    IndexType *new_col_idxs, ValueType *new_vals)
+    IndexType *new_col_idxs, ValueType *new_vals, bool is_lower)
 {
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
@@ -274,15 +280,26 @@ __global__ __launch_bounds__(default_block_size) void threshold_filter(
     }
 
     IndexType count{};
-    auto base = new_row_ptrs[row];
-    for (auto i = old_row_ptrs[row]; i < old_row_ptrs[row + 1]; ++i) {
+    // ignoring diagonal entries:
+    // lower triangular part has the diagonal last
+    // upper triangular part has the diagonal first
+    auto new_begin = new_row_ptrs[row] + !is_lower;
+    auto new_end = new_row_ptrs[row + 1] - is_lower;
+    auto begin = new_row_ptrs[row] + !is_lower;
+    auto end = new_row_ptrs[row + 1] - is_lower;
+    for (auto i = begin; i < end; ++i) {
         auto pred = abs(old_vals[i]) >= threshold;
         if (pred) {
-            new_col_idxs[count + base] = old_col_idxs[i];
-            new_vals[count + base] = old_vals[i];
+            new_col_idxs[count + new_begin] = old_col_idxs[i];
+            new_vals[count + new_begin] = old_vals[i];
         }
         count += pred;
     }
+    // add diagonal
+    auto in_diag = is_lower ? end : begin - 1;
+    auto out_diag = is_lower ? new_end : new_begin - 1;
+    new_col_idxs[out_diag] = old_col_idxs[in_diag];
+    new_vals[out_diag] = old_vals[in_diag];
 }
 
 

@@ -81,7 +81,7 @@ void threshold_filter(std::shared_ptr<const OmpExecutor> exec,
                       remove_complex<ValueType> threshold,
                       Array<IndexType> &new_row_ptrs_array,
                       Array<IndexType> &new_col_idxs_array,
-                      Array<ValueType> &new_vals_array)
+                      Array<ValueType> &new_vals_array, bool is_lower)
 {
     auto num_rows = a->get_size()[0];
     auto row_ptrs = a->get_const_row_ptrs();
@@ -94,9 +94,16 @@ void threshold_filter(std::shared_ptr<const OmpExecutor> exec,
 
 #pragma omp parallel for
     for (size_type row = 0; row < num_rows; ++row) {
+        // ignoring diagonal entries:
+        // lower triangular part has the diagonal last
+        // upper triangular part has the diagonal first
+        size_type begin = row_ptrs[row] + !is_lower;
+        size_type end = row_ptrs[row + 1] - is_lower;
         new_row_ptrs[row + 1] =
-            std::count_if(vals + row_ptrs[row], vals + row_ptrs[row + 1],
+            std::count_if(vals + begin, vals + end,
                           [&](ValueType v) { return abs(v) >= threshold; });
+        // add diagonal
+        new_row_ptrs[row + 1]++;
     }
 
     // build row pointers: exclusive scan (thus the + 1)
@@ -113,15 +120,26 @@ void threshold_filter(std::shared_ptr<const OmpExecutor> exec,
 
 #pragma omp parallel for
     for (size_type row = 0; row < num_rows; ++row) {
-        auto new_nz = new_row_ptrs[row];
-        for (size_type nz = row_ptrs[row]; nz < size_type(row_ptrs[row + 1]);
-             ++nz) {
+        // ignoring diagonal entries:
+        // lower triangular part has the diagonal last
+        // upper triangular part has the diagonal first
+        size_type new_begin = new_row_ptrs[row] + !is_lower;
+        size_type new_end = new_row_ptrs[row + 1] - is_lower;
+        size_type begin = row_ptrs[row] + !is_lower;
+        size_type end = row_ptrs[row + 1] - is_lower;
+        size_type count{};
+        for (auto nz = begin; nz < end; ++nz) {
             if (abs(vals[nz]) >= threshold) {
-                new_col_idxs[new_nz] = col_idxs[nz];
-                new_vals[new_nz] = vals[nz];
-                ++new_nz;
+                new_col_idxs[new_begin + count] = col_idxs[nz];
+                new_vals[new_begin + count] = vals[nz];
+                ++count;
             }
         }
+        // add diagonal
+        auto in_diag = is_lower ? end : begin - 1;
+        auto out_diag = is_lower ? new_end : new_begin - 1;
+        new_col_idxs[out_diag] = col_idxs[in_diag];
+        new_vals[out_diag] = vals[in_diag];
     }
 }
 

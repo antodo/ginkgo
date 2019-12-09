@@ -82,7 +82,7 @@ void threshold_filter(std::shared_ptr<const ReferenceExecutor> exec,
                       remove_complex<ValueType> threshold,
                       Array<IndexType> &new_row_ptrs_array,
                       Array<IndexType> &new_col_idxs_array,
-                      Array<ValueType> &new_vals_array)
+                      Array<ValueType> &new_vals_array, bool /* is_lower */)
 {
     auto num_rows = a->get_size()[0];
     auto row_ptrs = a->get_const_row_ptrs();
@@ -93,9 +93,12 @@ void threshold_filter(std::shared_ptr<const ReferenceExecutor> exec,
     new_row_ptrs_array.resize_and_reset(num_rows + 1);
     auto new_row_ptrs = new_row_ptrs_array.get_data();
     for (size_type row = 0; row < num_rows; ++row) {
-        new_row_ptrs[row + 1] =
-            std::count_if(vals + row_ptrs[row], vals + row_ptrs[row + 1],
-                          [&](ValueType v) { return abs(v) >= threshold; });
+        IndexType count{};
+        for (size_type nz = row_ptrs[row]; nz < size_type(row_ptrs[row + 1]);
+             ++nz) {
+            count += abs(vals[nz]) >= threshold || col_idxs[nz] == row;
+        }
+        new_row_ptrs[row + 1] = count;
     }
 
     // build row pointers: exclusive scan (thus the + 1)
@@ -114,7 +117,7 @@ void threshold_filter(std::shared_ptr<const ReferenceExecutor> exec,
         auto new_nz = new_row_ptrs[row];
         for (size_type nz = row_ptrs[row]; nz < size_type(row_ptrs[row + 1]);
              ++nz) {
-            if (abs(vals[nz]) >= threshold) {
+            if (abs(vals[nz]) >= threshold || col_idxs[nz] == row) {
                 new_col_idxs[new_nz] = col_idxs[nz];
                 new_vals[new_nz] = vals[nz];
                 ++new_nz;

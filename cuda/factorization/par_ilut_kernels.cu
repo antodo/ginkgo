@@ -198,7 +198,7 @@ void threshold_filter(std::shared_ptr<const CudaExecutor> exec,
                       remove_complex<ValueType> threshold,
                       Array<IndexType> &new_row_ptrs_array,
                       Array<IndexType> &new_col_idxs_array,
-                      Array<ValueType> &new_vals_array)
+                      Array<ValueType> &new_vals_array, bool is_lower)
 {
     auto old_row_ptrs = a->get_const_row_ptrs();
     auto old_col_idxs = a->get_const_col_idxs();
@@ -209,8 +209,8 @@ void threshold_filter(std::shared_ptr<const CudaExecutor> exec,
     new_row_ptrs_array.resize_and_reset(num_rows + 1);
     auto new_row_ptrs = new_row_ptrs_array.get_data();
     kernel::threshold_filter_nnz<<<num_blocks, default_block_size>>>(
-        old_row_ptrs, as_cuda_type(old_vals), num_rows, threshold,
-        new_row_ptrs);
+        old_row_ptrs, as_cuda_type(old_vals), num_rows, threshold, new_row_ptrs,
+        is_lower);
 
     // build row pointers
     auto num_row_ptrs = num_rows + 1;
@@ -235,7 +235,7 @@ void threshold_filter(std::shared_ptr<const CudaExecutor> exec,
     auto new_vals = new_vals_array.get_data();
     kernel::threshold_filter<<<num_blocks, default_block_size>>>(
         old_row_ptrs, old_col_idxs, as_cuda_type(old_vals), num_rows, threshold,
-        new_row_ptrs, new_col_idxs, as_cuda_type(new_vals));
+        new_row_ptrs, new_col_idxs, as_cuda_type(new_vals), is_lower);
 }
 
 

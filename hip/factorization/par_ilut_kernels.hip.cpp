@@ -201,7 +201,7 @@ void threshold_filter(std::shared_ptr<const HipExecutor> exec,
                       remove_complex<ValueType> threshold,
                       Array<IndexType> &new_row_ptrs_array,
                       Array<IndexType> &new_col_idxs_array,
-                      Array<ValueType> &new_vals_array)
+                      Array<ValueType> &new_vals_array, bool is_lower)
 {
     auto old_row_ptrs = a->get_const_row_ptrs();
     auto old_col_idxs = a->get_const_col_idxs();
@@ -214,7 +214,7 @@ void threshold_filter(std::shared_ptr<const HipExecutor> exec,
     hipLaunchKernelGGL(HIP_KERNEL_NAME(kernel::threshold_filter_nnz),
                        dim3(num_blocks), dim3(default_block_size), 0, 0,
                        old_row_ptrs, as_hip_type(old_vals), num_rows, threshold,
-                       new_row_ptrs);
+                       new_row_ptrs, is_lower);
 
     // build row pointers
     auto num_row_ptrs = num_rows + 1;
@@ -241,7 +241,7 @@ void threshold_filter(std::shared_ptr<const HipExecutor> exec,
                        dim3(num_blocks), dim3(default_block_size), 0, 0,
                        old_row_ptrs, old_col_idxs, as_hip_type(old_vals),
                        num_rows, threshold, new_row_ptrs, new_col_idxs,
-                       as_hip_type(new_vals));
+                       as_hip_type(new_vals), is_lower);
 }
 
 
