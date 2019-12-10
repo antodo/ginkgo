@@ -225,20 +225,11 @@ __global__ __launch_bounds__(default_block_size) void filter_bucket(
 }
 
 
-// this is necessary because we use a __host__ function in a __device__ function
-// (even though it is constexpr)
-template <typename T>
-struct sentinel_helper {
-    static constexpr auto inf = std::numeric_limits<T>::infinity();
-    static constexpr auto max = std::numeric_limits<T>::max();
-};
-
-
 template <typename IndexType, typename ValueType>
 __global__ __launch_bounds__(basecase_block_size) void basecase_select(
     const ValueType *input, IndexType size, IndexType rank, ValueType *out)
 {
-    constexpr auto sentinel = sentinel_helper<ValueType>::inf;
+    constexpr auto sentinel = device_numeric_limits<ValueType>::inf;
     ValueType local[basecase_local_size];
     __shared__ ValueType sh_local[basecase_size];
     for (int i = 0; i < basecase_local_size; ++i) {
@@ -301,7 +292,7 @@ __global__ __launch_bounds__(default_block_size) void spgeam_nnz(
     const IndexType *b_row_ptrs, const IndexType *b_col_idxs,
     IndexType num_rows, IndexType *nnz)
 {
-    constexpr auto sentinel = sentinel_helper<IndexType>::max;
+    constexpr auto sentinel = device_numeric_limits<IndexType>::max;
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
         return;
@@ -344,7 +335,7 @@ __global__ __launch_bounds__(default_block_size) void spgeam(
     const IndexType *b_col_idxs, const ValueType *b_vals, IndexType num_rows,
     const IndexType *c_row_ptrs, IndexType *c_col_idxs, ValueType *c_vals)
 {
-    constexpr auto sentinel = sentinel_helper<IndexType>::max;
+    constexpr auto sentinel = device_numeric_limits<IndexType>::max;
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
         return;
@@ -364,7 +355,6 @@ __global__ __launch_bounds__(default_block_size) void spgeam(
     IndexType count{};
     IndexType i{};
     IndexType c_col{};
-    ValueType c_val{};
     while (i < a_size + b_size) {
         auto advance_a = (a_col <= b_col);
         auto advance_b = (b_col <= a_col);
@@ -372,7 +362,7 @@ __global__ __launch_bounds__(default_block_size) void spgeam(
         i += advance_a + advance_b;
         a_ptr += advance_a;
         b_ptr += advance_b;
-        c_val = zero<ValueType>();
+        ValueType c_val{};
         if (advance_a) {
             a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
             c_val += alpha * a_vals[a_ptr - 1];
