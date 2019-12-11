@@ -69,31 +69,31 @@ protected:
           exec(std::static_pointer_cast<const gko::Executor>(ref)),
 
           mtx1(gko::initialize<Csr>({{.1, .1, -1., -2.},
-                                     {1., .1, -2., -3.},
-                                     {3., .1, -1., -1.},
-                                     {.1, -1., .1, .1}},
+                                     {0., .1, -2., -3.},
+                                     {0., 0., -1., -1.},
+                                     {0., 0., 0., 1.}},
                                     ref)),
-          mtx1_expect_thrm2(gko::initialize<Csr>({{0., 0., 0., -2.},
-                                                  {0., 0., -2., -3.},
-                                                  {3., 0., 0., 0.},
-                                                  {0., 0., 0., 0.}},
+          mtx1_expect_thrm2(gko::initialize<Csr>({{.1, 0., 0., -2.},
+                                                  {0., .1, -2., -3.},
+                                                  {0., 0., -1., 0.},
+                                                  {0., 0., 0., 1.}},
                                                  ref)),
-          mtx1_expect_thrm3(gko::initialize<Csr>({{0., 0., 0., 0.},
-                                                  {0., 0., 0., -3.},
-                                                  {3., 0., 0., 0.},
-                                                  {0., 0., 0., 0.}},
+          mtx1_expect_thrm3(gko::initialize<Csr>({{.1, 0., 0., 0.},
+                                                  {0., .1, 0., -3.},
+                                                  {0., 0., -1., 0.},
+                                                  {0., 0., 0., 1.}},
                                                  ref)),
           mtx1_complex(gko::initialize<ComplexCsr>(
               {{.1 + 0. * i, -1. + .1 * i, -1. + i, 1. - 2. * i},
-               {1. + .5 * i, .1 - i, -2. + .2 * i, -3. - 0. * i},
-               {3. - .1 * i, .1 + i, -1. - .3 * i, -1. + .1 * i},
-               {.1 - i, -1. + i, .1 - 0. * i, .1 + 2. * i}},
+               {0. * i, .1 - i, -2. + .2 * i, -3. - .1 * i},
+               {0. * i, 0. * i, -1. - .3 * i, -1. + .1 * i},
+               {0. * i, 0. * i, 0. * i, .1 + 2. * i}},
               ref)),
           mtx1_expect_complex_thrm(gko::initialize<ComplexCsr>(
-              {{0. * i, 0. * i, -1. + i, 1. - 2. * i},
-               {1. + .5 * i, 0. * i, -2. + .2 * i, -3. - 0. * i},
-               {3. - .1 * i, 0. * i, -1. - .3 * i, 0. * i},
-               {0. * i, -1. + i, 0. * i, .1 + 2. * i}},
+              {{.1 + 0. * i, 0. * i, -1. + i, 1. - 2. * i},
+               {0. * i, .1 - i, -2. + .2 * i, -3. - .1 * i},
+               {0. * i, 0. * i, -1. - .3 * i, 0. * i},
+               {0. * i, 0. * i, 0. * i, .1 + 2. * i}},
               ref)),
           mtx2(gko::initialize<Csr>({{0., 0., -1., -2.},
                                      {0., 0., 0., -3.},
@@ -112,6 +112,38 @@ protected:
                                                  ref))
     {}
 
+    template <typename Mtx>
+    void test_select(const std::unique_ptr<Mtx> &mtx, index_type rank,
+                     value_type expected, value_type tolerance = 0.0)
+    {
+        auto vals = mtx->get_const_values();
+        auto size = index_type(mtx->get_num_stored_elements());
+
+        auto result =
+            gko::kernels::reference::par_ilut_factorization::threshold_select(
+                ref, vals, size, rank);
+
+        ASSERT_NEAR(result, expected, tolerance);
+    }
+
+    template <typename Mtx>
+    void test_filter(const std::unique_ptr<Mtx> &mtx, value_type threshold,
+                     const std::unique_ptr<Mtx> &expected)
+    {
+        gko::Array<index_type> new_row_ptrs(exec);
+        gko::Array<index_type> new_col_idxs(exec);
+        gko::Array<typename Mtx::value_type> new_vals(exec);
+
+        gko::kernels::reference::par_ilut_factorization::threshold_filter(
+            ref, mtx.get(), threshold, new_row_ptrs, new_col_idxs, new_vals,
+            false);
+        auto res_mtx = Mtx::create(exec, mtx->get_size(), new_vals,
+                                   new_col_idxs, new_row_ptrs);
+
+        GKO_ASSERT_MTX_NEAR(expected, res_mtx, 0);
+        GKO_ASSERT_MTX_EQ_SPARSITY(expected, res_mtx);
+    }
+
     std::complex<value_type> i;
 
     std::shared_ptr<const gko::ReferenceExecutor> ref;
@@ -127,174 +159,57 @@ protected:
 };
 
 
-TEST_F(ParIlut, KernelThresholdSelect)
-{
-    auto vals = mtx1->get_const_values();
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(12);
-
-    auto result =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, vals, size, rank);
-
-    ASSERT_EQ(result, 2.0);
-}
+TEST_F(ParIlut, KernelThresholdSelect) { test_select(mtx1, 7, 2.0); }
 
 
-TEST_F(ParIlut, KernelThresholdSelectMin)
-{
-    auto vals = mtx1->get_const_values();
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(0);
-
-    auto result =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, vals, size, rank);
-
-    ASSERT_EQ(result, 0.1);
-}
+TEST_F(ParIlut, KernelThresholdSelectMin) { test_select(mtx1, 0, 0.1); }
 
 
-TEST_F(ParIlut, KernelThresholdSelectMax)
-{
-    auto vals = mtx1->get_const_values();
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(15);
-
-    auto result =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, vals, size, rank);
-
-    ASSERT_EQ(result, 3.0);
-}
+TEST_F(ParIlut, KernelThresholdSelectMax) { test_select(mtx1, 9, 3.0); }
 
 
 TEST_F(ParIlut, KernelComplexThresholdSelect)
 {
-    auto vals = mtx1_complex->get_const_values();
-    auto size = index_type(mtx1_complex->get_num_stored_elements());
-    auto rank = index_type(14);
-
-    auto result =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, vals, size, rank);
-
-    ASSERT_NEAR(result, 3.0, 1e-14);
+    test_select(mtx1_complex, 5, sqrt(2), 1e-14);
 }
 
 
 TEST_F(ParIlut, KernelComplexThresholdSelectMin)
 {
-    auto vals = mtx1_complex->get_const_values();
-    auto size = index_type(mtx1_complex->get_num_stored_elements());
-    auto rank = index_type(0);
-
-    auto result =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, vals, size, rank);
-
-    ASSERT_NEAR(result, 0.1, 1e-14);
+    test_select(mtx1_complex, 0, 0.1, 1e-14);
 }
 
 
 TEST_F(ParIlut, KernelComplexThresholdSelectMax)
 {
-    auto vals = mtx1_complex->get_const_values();
-    auto size = index_type(mtx1_complex->get_num_stored_elements());
-    auto rank = index_type(15);
-
-    auto result =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, vals, size, rank);
-
-    ASSERT_NEAR(result, sqrt(9.01), 1e-14);
+    test_select(mtx1_complex, 9, sqrt(9.01), 1e-14);
 }
 
 
-TEST_F(ParIlut, KernelThresholdFilterNone)
-{
-    gko::Array<index_type> new_row_ptrs(exec);
-    gko::Array<index_type> new_col_idxs(exec);
-    gko::Array<value_type> new_vals(exec);
-    auto threshold = 0.1;
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
-    auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
-                               new_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(mtx1, res_mtx, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1, res_mtx);
-}
+TEST_F(ParIlut, KernelThresholdFilterNone) { test_filter(mtx1, 0.0, mtx1); }
 
 
 TEST_F(ParIlut, KernelThresholdFilterSomeAtThreshold)
 {
-    gko::Array<index_type> new_row_ptrs(exec);
-    gko::Array<index_type> new_col_idxs(exec);
-    gko::Array<value_type> new_vals(exec);
-    auto threshold = 2.0;
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
-    auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
-                               new_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(mtx1_expect_thrm2, res_mtx, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_expect_thrm2, res_mtx);
+    test_filter(mtx1, 2.0, mtx1_expect_thrm2);
 }
 
 
 TEST_F(ParIlut, KernelThresholdFilterSomeAboveThreshold)
 {
-    gko::Array<index_type> new_row_ptrs(exec);
-    gko::Array<index_type> new_col_idxs(exec);
-    gko::Array<value_type> new_vals(exec);
-    auto threshold = 3.0;
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
-    auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
-                               new_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(mtx1_expect_thrm3, res_mtx, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_expect_thrm3, res_mtx);
+    test_filter(mtx1, 3.0, mtx1_expect_thrm3);
 }
 
 
 TEST_F(ParIlut, KernelComplexThresholdFilterNone)
 {
-    gko::Array<index_type> new_row_ptrs(exec);
-    gko::Array<index_type> new_col_idxs(exec);
-    gko::Array<std::complex<value_type>> new_vals(exec);
-    auto threshold = 0.;
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1_complex.get(), threshold, new_row_ptrs, new_col_idxs,
-        new_vals);
-    auto res_mtx = ComplexCsr::create(exec, mtx1->get_size(), new_vals,
-                                      new_col_idxs, new_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(mtx1_complex, res_mtx, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_complex, res_mtx);
+    test_filter(mtx1_complex, 0.0, mtx1_complex);
 }
 
 
 TEST_F(ParIlut, KernelComplexThresholdFilterSomeAtThreshold)
 {
-    gko::Array<index_type> new_row_ptrs(exec);
-    gko::Array<index_type> new_col_idxs(exec);
-    gko::Array<std::complex<value_type>> new_vals(exec);
-    auto threshold = 1.01;
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1_complex.get(), threshold, new_row_ptrs, new_col_idxs,
-        new_vals);
-    auto res_mtx = ComplexCsr::create(exec, mtx1->get_size(), new_vals,
-                                      new_col_idxs, new_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(mtx1_expect_complex_thrm, res_mtx, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_expect_complex_thrm, res_mtx);
+    test_filter(mtx1_complex, 1.01, mtx1_expect_complex_thrm);
 }
 
 

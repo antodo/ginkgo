@@ -62,6 +62,7 @@ protected:
     using value_type = gko::default_precision;
     using index_type = gko::int32;
     using Dense = gko::matrix::Dense<value_type>;
+    using ComplexDense = gko::matrix::Dense<std::complex<value_type>>;
     using Coo = gko::matrix::Coo<value_type, index_type>;
     using Csr = gko::matrix::Csr<value_type, index_type>;
     using ComplexCsr = gko::matrix::Csr<std::complex<value_type>, index_type>;
@@ -76,27 +77,129 @@ protected:
             mtx_size[0], mtx_size[1],
             std::uniform_int_distribution<>(10, mtx_size[1]),
             std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
-        mtx1_complex = gko::test::generate_random_matrix<ComplexCsr>(
-            mtx_size[0], mtx_size[1],
-            std::uniform_int_distribution<>(10, mtx_size[1]),
-            std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
         mtx2 = gko::test::generate_random_matrix<Csr>(
             mtx_size[0], mtx_size[1],
             std::uniform_int_distribution<>(0, mtx_size[1]),
             std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
+        mtx_l = gko::test::generate_random_lower_triangular_matrix<Csr>(
+            mtx_size[0], mtx_size[0], false,
+            std::uniform_int_distribution<>(10, mtx_size[0]),
+            std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
+        mtx_l_complex =
+            gko::test::generate_random_lower_triangular_matrix<ComplexCsr>(
+                mtx_size[0], mtx_size[0], false,
+                std::uniform_int_distribution<>(10, mtx_size[0]),
+                std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
+        mtx_u = gko::test::generate_random_upper_triangular_matrix<Csr>(
+            mtx_size[0], mtx_size[0], false,
+            std::uniform_int_distribution<>(10, mtx_size[0]),
+            std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
+        mtx_u_complex =
+            gko::test::generate_random_upper_triangular_matrix<ComplexCsr>(
+                mtx_size[0], mtx_size[0], false,
+                std::uniform_int_distribution<>(10, mtx_size[0]),
+                std::normal_distribution<>(-1.0, 1.0), rand_engine, ref);
         alpha = gko::initialize<Dense>({1.0}, ref);
         beta = gko::initialize<Dense>({-2.0}, ref);
+        alpha_complex = gko::initialize<ComplexDense>(
+            {std::complex<value_type>{0., -1.}}, ref);
+        beta_complex = gko::initialize<ComplexDense>(
+            {std::complex<value_type>{-2., 1.}}, ref);
 
         dmtx1 = Csr::create(omp);
         dmtx1->copy_from(mtx1.get());
-        dmtx1_complex = ComplexCsr::create(omp);
-        dmtx1_complex->copy_from(mtx1_complex.get());
         dmtx2 = Csr::create(omp);
         dmtx2->copy_from(mtx2.get());
+        dmtx_l = Csr::create(omp);
+        dmtx_l->copy_from(mtx_l.get());
+        dmtx_u = Csr::create(omp);
+        dmtx_u->copy_from(mtx_u.get());
+        dmtx_l_complex = ComplexCsr::create(omp);
+        dmtx_l_complex->copy_from(mtx_l_complex.get());
+        dmtx_u_complex = ComplexCsr::create(omp);
+        dmtx_u_complex->copy_from(mtx_u_complex.get());
         dalpha = Dense::create(omp);
         dalpha->copy_from(alpha.get());
         dbeta = Dense::create(omp);
         dbeta->copy_from(beta.get());
+        dalpha_complex = ComplexDense::create(omp);
+        dalpha_complex->copy_from(alpha_complex.get());
+        dbeta_complex = ComplexDense::create(omp);
+        dbeta_complex->copy_from(beta_complex.get());
+    }
+
+    template <typename Mtx>
+    void test_select(const std::unique_ptr<Mtx> &mtx,
+                     const std::unique_ptr<Mtx> &dmtx, index_type rank)
+    {
+        auto size = index_type(mtx->get_num_stored_elements());
+
+        auto res =
+            gko::kernels::reference::par_ilut_factorization::threshold_select(
+                ref, mtx->get_const_values(), size, rank);
+        auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select(
+            omp, dmtx->get_const_values(), size, rank);
+
+        ASSERT_EQ(res, dres);
+    }
+
+    template <typename Mtx>
+    void test_filter(const std::unique_ptr<Mtx> &mtx,
+                     const std::unique_ptr<Mtx> &dmtx, value_type threshold,
+                     bool lower)
+    {
+        gko::Array<index_type> new_row_ptrs(ref);
+        gko::Array<index_type> new_col_idxs(ref);
+        gko::Array<typename Mtx::value_type> new_vals(ref);
+        gko::Array<index_type> dnew_row_ptrs(omp);
+        gko::Array<index_type> dnew_col_idxs(omp);
+        gko::Array<typename Mtx::value_type> dnew_vals(omp);
+
+        gko::kernels::reference::par_ilut_factorization::threshold_filter(
+            ref, mtx.get(), threshold, new_row_ptrs, new_col_idxs, new_vals,
+            lower);
+        gko::kernels::omp::par_ilut_factorization::threshold_filter(
+            omp, dmtx.get(), threshold, dnew_row_ptrs, dnew_col_idxs, dnew_vals,
+            lower);
+        auto res =
+            Mtx::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
+        auto dres =
+            Mtx::create(omp, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
+
+        GKO_ASSERT_MTX_NEAR(res, dres, 0);
+        GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
+    }
+
+    template <typename Mtx, typename DenseMtx>
+    void test_spgeam(const std::unique_ptr<Mtx> &mtxa,
+                     const std::unique_ptr<Mtx> &mtxb,
+                     const std::unique_ptr<DenseMtx> &a,
+                     const std::unique_ptr<DenseMtx> &b,
+                     const std::unique_ptr<Mtx> &dmtxa,
+                     const std::unique_ptr<Mtx> &dmtxb,
+                     const std::unique_ptr<DenseMtx> &da,
+                     const std::unique_ptr<DenseMtx> &db)
+    {
+        gko::Array<index_type> new_row_ptrs(ref);
+        gko::Array<index_type> new_col_idxs(ref);
+        gko::Array<typename Mtx::value_type> new_vals(ref);
+        gko::Array<index_type> dnew_row_ptrs(omp);
+        gko::Array<index_type> dnew_col_idxs(omp);
+        gko::Array<typename Mtx::value_type> dnew_vals(omp);
+
+        gko::kernels::reference::par_ilut_factorization::spgeam(
+            ref, a.get(), mtxa.get(), b.get(), mtxb.get(), new_row_ptrs,
+            new_col_idxs, new_vals);
+        gko::kernels::omp::par_ilut_factorization::spgeam(
+            omp, da.get(), dmtxa.get(), db.get(), dmtxb.get(), dnew_row_ptrs,
+            dnew_col_idxs, dnew_vals);
+        auto res =
+            Mtx::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
+        auto dres =
+            Mtx::create(omp, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
+
+        GKO_ASSERT_MTX_NEAR(res, dres, 1e-14);
+        GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
     }
 
     std::shared_ptr<gko::ReferenceExecutor> ref;
@@ -106,240 +209,155 @@ protected:
     std::default_random_engine rand_engine;
 
     std::unique_ptr<Csr> mtx1;
-    std::unique_ptr<ComplexCsr> mtx1_complex;
     std::unique_ptr<Csr> mtx2;
+    std::unique_ptr<Csr> mtx_l;
+    std::unique_ptr<ComplexCsr> mtx_l_complex;
+    std::unique_ptr<Csr> mtx_u;
+    std::unique_ptr<ComplexCsr> mtx_u_complex;
     std::unique_ptr<Dense> alpha;
     std::unique_ptr<Dense> beta;
+    std::unique_ptr<ComplexDense> alpha_complex;
+    std::unique_ptr<ComplexDense> beta_complex;
 
     std::unique_ptr<Csr> dmtx1;
-    std::unique_ptr<ComplexCsr> dmtx1_complex;
     std::unique_ptr<Csr> dmtx2;
+    std::unique_ptr<Csr> dmtx_l;
+    std::unique_ptr<ComplexCsr> dmtx_l_complex;
+    std::unique_ptr<Csr> dmtx_u;
+    std::unique_ptr<ComplexCsr> dmtx_u_complex;
     std::unique_ptr<Dense> dalpha;
     std::unique_ptr<Dense> dbeta;
+    std::unique_ptr<ComplexDense> dalpha_complex;
+    std::unique_ptr<ComplexDense> dbeta_complex;
 };
 
 
 TEST_F(ParIlut, KernelThresholdSelectIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = size / 3;
-
-    auto res =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, mtx1->get_const_values(), size, rank);
-    auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select(
-        omp, dmtx1->get_const_values(), size, rank);
-
-    ASSERT_EQ(res, dres);
+    test_select(mtx_l, dmtx_l, mtx_l->get_num_stored_elements() / 3);
 }
 
 
 TEST_F(ParIlut, KernelThresholdSelectMinIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(0);
-
-    auto res =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, mtx1->get_const_values(), size, rank);
-    auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select(
-        omp, dmtx1->get_const_values(), size, rank);
-
-    ASSERT_EQ(res, dres);
+    test_select(mtx_l, dmtx_l, 0);
 }
 
 
 TEST_F(ParIlut, KernelThresholdSelectMaxIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(size - 1);
-
-    auto res =
-        gko::kernels::reference::par_ilut_factorization::threshold_select(
-            ref, mtx1->get_const_values(), size, rank);
-    auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select(
-        omp, dmtx1->get_const_values(), size, rank);
-
-    ASSERT_EQ(res, dres);
+    test_select(mtx_l, dmtx_l, mtx_l->get_num_stored_elements() - 1);
 }
 
 
 TEST_F(ParIlut, KernelComplexThresholdSelectIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = size / 3;
-
-    auto res =
-        gko::kernels::reference::par_ilut_factorization::threshold_select<
-            std::complex<value_type>>(ref, mtx1_complex->get_const_values(),
-                                      size, rank);
-    auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select<
-        std::complex<value_type>>(omp, dmtx1_complex->get_const_values(), size,
-                                  rank);
-
-    ASSERT_EQ(res, dres);
+    test_select(mtx_l_complex, dmtx_l_complex,
+                mtx_l->get_num_stored_elements() / 3);
 }
 
 
 TEST_F(ParIlut, KernelComplexThresholdSelectMinIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(0);
-
-    auto res =
-        gko::kernels::reference::par_ilut_factorization::threshold_select<
-            std::complex<value_type>>(ref, mtx1_complex->get_const_values(),
-                                      size, rank);
-    auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select<
-        std::complex<value_type>>(omp, dmtx1_complex->get_const_values(), size,
-                                  rank);
-
-    ASSERT_EQ(res, dres);
+    test_select(mtx_l_complex, dmtx_l_complex, 0);
 }
 
 
-TEST_F(ParIlut, KernelComplexThresholdSelectMaxIsEquivalentToRef)
+TEST_F(ParIlut, KernelComplexThresholdSelectMaxLowerIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    auto size = index_type(mtx1->get_num_stored_elements());
-    auto rank = index_type(size - 1);
-
-    auto res =
-        gko::kernels::reference::par_ilut_factorization::threshold_select<
-            std::complex<value_type>>(ref, mtx1_complex->get_const_values(),
-                                      size, rank);
-    auto dres = gko::kernels::omp::par_ilut_factorization::threshold_select<
-        std::complex<value_type>>(omp, dmtx1_complex->get_const_values(), size,
-                                  rank);
-
-    ASSERT_EQ(res, dres);
+    test_select(mtx_l_complex, dmtx_l_complex,
+                mtx_l->get_num_stored_elements() - 1);
 }
 
 
-TEST_F(ParIlut, KernelThresholdFilterIsEquivalentToRef)
+TEST_F(ParIlut, KernelThresholdFilterLowerIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    gko::Array<index_type> new_col_idxs(ref);
-    gko::Array<value_type> new_vals(ref);
-    gko::Array<index_type> dnew_row_ptrs(omp);
-    gko::Array<index_type> dnew_col_idxs(omp);
-    gko::Array<value_type> dnew_vals(omp);
-    value_type threshold{0.5};
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
-    gko::kernels::omp::par_ilut_factorization::threshold_filter(
-        omp, dmtx1.get(), threshold, dnew_row_ptrs, dnew_col_idxs, dnew_vals);
-    auto res = Csr::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
-    auto dres =
-        Csr::create(omp, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(res, dres, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
+    test_filter(mtx_l, dmtx_l, 0.5, true);
 }
 
 
-TEST_F(ParIlut, KernelThresholdFilterNoneIsEquivalentToRef)
+TEST_F(ParIlut, KernelThresholdFilterUpperIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    gko::Array<index_type> new_col_idxs(ref);
-    gko::Array<value_type> new_vals(ref);
-    gko::Array<index_type> dnew_row_ptrs(omp);
-    gko::Array<index_type> dnew_col_idxs(omp);
-    gko::Array<value_type> dnew_vals(omp);
-    value_type threshold = 0;
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter(
-        ref, mtx1.get(), threshold, new_row_ptrs, new_col_idxs, new_vals);
-    gko::kernels::omp::par_ilut_factorization::threshold_filter(
-        omp, dmtx1.get(), threshold, dnew_row_ptrs, dnew_col_idxs, dnew_vals);
-    auto res = Csr::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
-    auto dres =
-        Csr::create(omp, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(res, dres, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
+    test_filter(mtx_u, dmtx_u, 0.5, false);
 }
 
 
-TEST_F(ParIlut, KernelComplexThresholdFilterIsEquivalentToRef)
+TEST_F(ParIlut, KernelThresholdFilterNoneLowerIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    gko::Array<index_type> new_col_idxs(ref);
-    gko::Array<std::complex<value_type>> new_vals(ref);
-    gko::Array<index_type> dnew_row_ptrs(omp);
-    gko::Array<index_type> dnew_col_idxs(omp);
-    gko::Array<std::complex<value_type>> dnew_vals(omp);
-    value_type threshold{0.5};
-
-    gko::kernels::reference::par_ilut_factorization::threshold_filter<
-        std::complex<value_type>>(ref, mtx1_complex.get(), threshold,
-                                  new_row_ptrs, new_col_idxs, new_vals);
-    gko::kernels::omp::par_ilut_factorization::threshold_filter<
-        std::complex<value_type>>(omp, dmtx1_complex.get(), threshold,
-                                  dnew_row_ptrs, dnew_col_idxs, dnew_vals);
-    auto res =
-        ComplexCsr::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
-    auto dres = ComplexCsr::create(omp, mtx_size, dnew_vals, dnew_col_idxs,
-                                   dnew_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(res, dres, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
+    test_filter(mtx_l, dmtx_l, 0, true);
 }
 
 
-TEST_F(ParIlut, KernelComplexThresholdFilterNoneIsEquivalentToRef)
+TEST_F(ParIlut, KernelThresholdFilterNoneUpperIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    gko::Array<index_type> new_col_idxs(ref);
-    gko::Array<std::complex<value_type>> new_vals(ref);
-    gko::Array<index_type> dnew_row_ptrs(omp);
-    gko::Array<index_type> dnew_col_idxs(omp);
-    gko::Array<std::complex<value_type>> dnew_vals(omp);
-    value_type threshold = 0;
+    test_filter(mtx_u, dmtx_u, 0, false);
+}
 
-    gko::kernels::reference::par_ilut_factorization::threshold_filter<
-        std::complex<value_type>>(ref, mtx1_complex.get(), threshold,
-                                  new_row_ptrs, new_col_idxs, new_vals);
-    gko::kernels::omp::par_ilut_factorization::threshold_filter<
-        std::complex<value_type>>(omp, dmtx1_complex.get(), threshold,
-                                  dnew_row_ptrs, dnew_col_idxs, dnew_vals);
-    auto res =
-        ComplexCsr::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
-    auto dres = ComplexCsr::create(omp, mtx_size, dnew_vals, dnew_col_idxs,
-                                   dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR(res, dres, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
+TEST_F(ParIlut, KernelThresholdFilterAllLowerIsEquivalentToRef)
+{
+    test_filter(mtx_l, dmtx_l, 1e6, true);
+}
+
+
+TEST_F(ParIlut, KernelThresholdFilterAllUpperIsEquivalentToRef)
+{
+    test_filter(mtx_u, dmtx_u, 1e6, false);
+}
+
+
+TEST_F(ParIlut, KernelComplexThresholdFilterLowerIsEquivalentToRef)
+{
+    test_filter(mtx_l_complex, dmtx_l_complex, 0.5, true);
+}
+
+
+TEST_F(ParIlut, KernelComplexThresholdFilterUpperIsEquivalentToRef)
+{
+    test_filter(mtx_u_complex, dmtx_u_complex, 0.5, false);
+}
+
+
+TEST_F(ParIlut, KernelComplexThresholdFilterNoneLowerIsEquivalentToRef)
+{
+    test_filter(mtx_l_complex, dmtx_l_complex, 0, true);
+}
+
+
+TEST_F(ParIlut, KernelComplexThresholdFilterNoneUpperIsEquivalentToRef)
+{
+    test_filter(mtx_u_complex, dmtx_u_complex, 0, false);
+}
+
+
+TEST_F(ParIlut, KernelComplexThresholdFilterAllLowerIsEquivalentToRef)
+{
+    test_filter(mtx_l_complex, dmtx_l_complex, 1e6, true);
+}
+
+
+TEST_F(ParIlut, KernelComplexThresholdFilterAllUpperIsEquivalentToRef)
+{
+    test_filter(mtx_u_complex, dmtx_u_complex, 1e6, false);
 }
 
 
 TEST_F(ParIlut, KernelSpGeAMIsEquivalentToRef)
 {
-    gko::Array<index_type> new_row_ptrs(ref);
-    gko::Array<index_type> new_col_idxs(ref);
-    gko::Array<value_type> new_vals(ref);
-    gko::Array<index_type> dnew_row_ptrs(omp);
-    gko::Array<index_type> dnew_col_idxs(omp);
-    gko::Array<value_type> dnew_vals(omp);
+    test_spgeam(mtx1, mtx2, alpha, beta, dmtx1, dmtx2, dalpha, dbeta);
+}
 
-    gko::kernels::reference::par_ilut_factorization::spgeam(
-        ref, alpha.get(), mtx1.get(), beta.get(), mtx2.get(), new_row_ptrs,
-        new_col_idxs, new_vals);
-    gko::kernels::omp::par_ilut_factorization::spgeam(
-        omp, dalpha.get(), dmtx1.get(), dbeta.get(), dmtx2.get(), dnew_row_ptrs,
-        dnew_col_idxs, dnew_vals);
-    auto res = Csr::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
-    auto dres =
-        Csr::create(omp, mtx_size, dnew_vals, dnew_col_idxs, dnew_row_ptrs);
 
-    GKO_ASSERT_MTX_NEAR(res, dres, 1e-14);
-    GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
+TEST_F(ParIlut, KernelSpGeAMTriangularIsEquivalentToRef)
+{
+    test_spgeam(mtx_l, mtx_u, alpha, beta, dmtx_l, dmtx_u, dalpha, dbeta);
+}
+
+
+TEST_F(ParIlut, KernelComplexSpGeAMTriangularIsEquivalentToRef)
+{
+    test_spgeam(mtx_l_complex, mtx_u_complex, alpha_complex, beta_complex,
+                dmtx_l_complex, dmtx_u_complex, dalpha_complex, dbeta_complex);
 }
 
 
