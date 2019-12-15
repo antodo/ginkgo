@@ -7,6 +7,7 @@ function(ginkgo_add_object_library name)
 endfunction()
 
 add_subdirectory(omp)
+add_subdirectory(mpi)
 add_subdirectory(cuda)
 add_subdirectory(hip)
 add_subdirectory(reference)
