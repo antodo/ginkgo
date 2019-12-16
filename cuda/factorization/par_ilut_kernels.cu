@@ -47,6 +47,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "cuda/base/math.hpp"
 #include "cuda/base/pointer_mode_guard.hpp"
 #include "cuda/components/atomic.cuh"
+#include "cuda/components/intrinsics.cuh"
 #include "cuda/components/prefix_sum.cuh"
 #include "cuda/components/sorting.cuh"
 
@@ -205,17 +206,19 @@ void threshold_filter(std::shared_ptr<const CudaExecutor> exec,
     auto old_vals = a->get_const_values();
     // compute nnz for each row
     auto num_rows = IndexType(a->get_size()[0]);
-    auto num_blocks = ceildiv(num_rows, default_block_size);
+    auto block_size = default_block_size / config::warp_size;
+    auto num_blocks = ceildiv(num_rows, block_size);
     new_row_ptrs_array.resize_and_reset(num_rows + 1);
     auto new_row_ptrs = new_row_ptrs_array.get_data();
-    kernel::threshold_filter_nnz<<<num_blocks, default_block_size>>>(
+    auto block_dim = dim3(config::warp_size, num_blocks);
+    kernel::threshold_filter_nnz<<<num_blocks, block_dim>>>(
         old_row_ptrs, as_cuda_type(old_vals), num_rows, threshold, new_row_ptrs,
         is_lower);
 
     // build row pointers
     auto num_row_ptrs = num_rows + 1;
     auto num_reduce_blocks = ceildiv(num_row_ptrs, default_block_size);
-    Array<IndexType> block_counts_array(exec, num_blocks);
+    Array<IndexType> block_counts_array(exec, num_reduce_blocks);
     auto block_counts = block_counts_array.get_data();
 
     start_prefix_sum<default_block_size>
@@ -233,7 +236,7 @@ void threshold_filter(std::shared_ptr<const CudaExecutor> exec,
     new_vals_array.resize_and_reset(num_nnz);
     auto new_col_idxs = new_col_idxs_array.get_data();
     auto new_vals = new_vals_array.get_data();
-    kernel::threshold_filter<<<num_blocks, default_block_size>>>(
+    kernel::threshold_filter<<<num_blocks, block_dim>>>(
         old_row_ptrs, old_col_idxs, as_cuda_type(old_vals), num_rows, threshold,
         new_row_ptrs, new_col_idxs, as_cuda_type(new_vals), is_lower);
 }

@@ -45,6 +45,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "hip/base/math.hip.hpp"
 #include "hip/components/atomic.hip.hpp"
+#include "hip/components/intrinsics.hip.hpp"
 #include "hip/components/prefix_sum.hip.hpp"
 #include "hip/components/sorting.hip.hpp"
 
@@ -208,7 +209,7 @@ void threshold_filter(std::shared_ptr<const HipExecutor> exec,
     auto old_vals = a->get_const_values();
     // compute nnz for each row
     auto num_rows = IndexType(a->get_size()[0]);
-    auto num_blocks = ceildiv(num_rows, default_block_size);
+    auto num_blocks = ceildiv(num_rows, default_block_size / config::warp_size);
     new_row_ptrs_array.resize_and_reset(num_rows + 1);
     auto new_row_ptrs = new_row_ptrs_array.get_data();
     hipLaunchKernelGGL(HIP_KERNEL_NAME(kernel::threshold_filter_nnz),
@@ -219,7 +220,7 @@ void threshold_filter(std::shared_ptr<const HipExecutor> exec,
     // build row pointers
     auto num_row_ptrs = num_rows + 1;
     auto num_reduce_blocks = ceildiv(num_row_ptrs, default_block_size);
-    Array<IndexType> block_counts_array(exec, num_blocks);
+    Array<IndexType> block_counts_array(exec, num_reduce_blocks);
     auto block_counts = block_counts_array.get_data();
 
     hipLaunchKernelGGL(HIP_KERNEL_NAME(start_prefix_sum<default_block_size>),

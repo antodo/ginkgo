@@ -66,9 +66,9 @@ __global__ __launch_bounds__(searchtree_width) void build_searchtree(
     bitonic_sort<sample_size, oversampling_factor>(samples, sh_samples);
     if (threadIdx.x > 0) {
         // root has level 0
-        auto level = searchtree_height - __ffs(threadIdx.x);
+        auto level = searchtree_height - ffs(threadIdx.x);
         // we get the in-level index by removing trailing 10000...
-        auto idx_in_level = threadIdx.x >> __ffs(threadIdx.x);
+        auto idx_in_level = threadIdx.x >> ffs(threadIdx.x);
         // we get the global index by adding previous levels
         auto previous_levels = (1 << level) - 1;
         tree_output[idx_in_level + previous_levels] = samples[0];
@@ -243,27 +243,57 @@ __global__ __launch_bounds__(basecase_block_size) void basecase_select(
 }
 
 
+template <typename IndexType, typename ValueType, typename BeginCallback,
+          typename StepCallback, typename FinishCallback>
+__device__ __launch_bounds__(default_block_size) void abstract_threshold_filter(
+    const IndexType *row_ptrs, const ValueType *vals, IndexType num_rows,
+    remove_complex<ValueType> threshold, bool is_lower, BeginCallback begin_cb,
+    StepCallback step_cb, FinishCallback finish_cb)
+{
+    auto tidx = threadIdx.x + blockDim.x * blockIdx.x;
+    auto row = tidx / config::warp_size;
+    auto lane = threadIdx.x % config::warp_size;
+    auto warp = group::thread_block_tile<config::warp_size>();
+    using lanemask = decltype(warp.ballot(true));
+    auto lane_prefix_mask = (lanemask(1) << lane) - 1;
+    if (row >= num_rows) {
+        return;
+    }
+
+    ValueType val{};
+    auto begin = row_ptrs[row];
+    auto end = row_ptrs[row + 1];
+    begin_cb(row);
+    auto diag_idx = is_lower ? end - 1 : begin;
+    auto num_steps = ceildiv(end - begin, config::warp_size);
+    for (auto step = 0; step < num_steps; ++step) {
+        auto idx = begin + lane + step * config::warp_size;
+        if (idx < end) {
+            val = vals[idx];
+        }
+        auto keep = idx < end && (abs(val) >= threshold || idx == diag_idx);
+        auto mask = warp.ballot(keep);
+        step_cb(idx, keep, popcnt(mask), popcnt(mask & lane_prefix_mask));
+    }
+    finish_cb(row, lane);
+}
+
+
 template <typename IndexType, typename ValueType>
 __global__ __launch_bounds__(default_block_size) void threshold_filter_nnz(
     const IndexType *row_ptrs, const ValueType *vals, IndexType num_rows,
     remove_complex<ValueType> threshold, IndexType *nnz, bool is_lower)
 {
-    auto row = threadIdx.x + blockDim.x * blockIdx.x;
-    if (row >= num_rows) {
-        return;
-    }
-
     IndexType count{};
-    // ignoring diagonal entries:
-    // lower triangular part has the diagonal last
-    // upper triangular part has the diagonal first
-    auto begin = row_ptrs[row] + !is_lower;
-    auto end = row_ptrs[row + 1] - is_lower;
-    for (auto i = begin; i < end; ++i) {
-        count += abs(vals[i]) >= threshold;
-    }
-    // add the diagonal entry
-    nnz[row] = count + 1;
+    abstract_threshold_filter(row_ptrs, vals, num_rows, threshold, is_lower,
+                              [](IndexType) {},
+                              [&](IndexType, bool, IndexType warp_count,
+                                  IndexType) { count += warp_count; },
+                              [&](IndexType row, IndexType lane) {
+                                  if (row < num_rows && lane == 0) {
+                                      nnz[row] = count;
+                                  }
+                              });
 }
 
 
@@ -274,32 +304,22 @@ __global__ __launch_bounds__(default_block_size) void threshold_filter(
     remove_complex<ValueType> threshold, const IndexType *new_row_ptrs,
     IndexType *new_col_idxs, ValueType *new_vals, bool is_lower)
 {
-    auto row = threadIdx.x + blockDim.x * blockIdx.x;
-    if (row >= num_rows) {
-        return;
-    }
-
     IndexType count{};
-    // ignoring diagonal entries:
-    // lower triangular part has the diagonal last
-    // upper triangular part has the diagonal first
-    auto new_begin = new_row_ptrs[row] + !is_lower;
-    auto new_end = new_row_ptrs[row + 1] - is_lower;
-    auto begin = new_row_ptrs[row] + !is_lower;
-    auto end = new_row_ptrs[row + 1] - is_lower;
-    for (auto i = begin; i < end; ++i) {
-        auto pred = abs(old_vals[i]) >= threshold;
-        if (pred) {
-            new_col_idxs[count + new_begin] = old_col_idxs[i];
-            new_vals[count + new_begin] = old_vals[i];
-        }
-        count += pred;
-    }
-    // add diagonal
-    auto in_diag = is_lower ? end : begin - 1;
-    auto out_diag = is_lower ? new_end : new_begin - 1;
-    new_col_idxs[out_diag] = old_col_idxs[in_diag];
-    new_vals[out_diag] = old_vals[in_diag];
+    IndexType new_offset{};
+    abstract_threshold_filter(
+        old_row_ptrs, old_vals, num_rows, threshold, is_lower,
+        [&](IndexType row) { new_offset = new_row_ptrs[row]; },
+        [&](IndexType idx, bool keep, IndexType warp_count,
+            IndexType warp_prefix_sum) {
+            if (keep) {
+                auto new_idx = new_offset + warp_prefix_sum + count;
+                new_col_idxs[new_idx] = old_col_idxs[idx];
+                // hopefully the compiler is able to remove this duplicate load
+                new_vals[new_idx] = old_vals[idx];
+            }
+            count += warp_count;
+        },
+        [](IndexType, IndexType) {});
 }
 
 
