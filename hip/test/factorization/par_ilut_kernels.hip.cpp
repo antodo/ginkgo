@@ -68,7 +68,7 @@ protected:
     using ComplexCsr = gko::matrix::Csr<std::complex<value_type>, index_type>;
 
     ParIlut()
-        : mtx_size(7, 5),
+        : mtx_size(700, 500),
           rand_engine(1337),
           ref(gko::ReferenceExecutor::create()),
           hip(gko::HipExecutor::create(0, ref))
