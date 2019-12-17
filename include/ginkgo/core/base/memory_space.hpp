@@ -297,6 +297,33 @@ private:
         const override
 
 
+class DistributedMemorySpace
+    : public detail::MemorySpaceBase<DistributedMemorySpace> {
+    friend class detail::MemorySpaceBase<DistributedMemorySpace>;
+
+public:
+    /**
+     * Creates a new DistributedMemorySpace.
+     */
+    static std::shared_ptr<DistributedMemorySpace> create()
+    {
+        return std::shared_ptr<DistributedMemorySpace>(
+            new DistributedMemorySpace());
+    }
+
+    void synchronize() const override;
+
+protected:
+    DistributedMemorySpace() = default;
+
+    void *raw_alloc(size_type size) const override;
+
+    void raw_free(void *ptr) const noexcept override;
+
+    GKO_ENABLE_FOR_ALL_MEMORY_SPACES(GKO_OVERRIDE_RAW_COPY_TO);
+};
+
+
 class HostMemorySpace : public detail::MemorySpaceBase<HostMemorySpace> {
     friend class detail::MemorySpaceBase<HostMemorySpace>;
 
