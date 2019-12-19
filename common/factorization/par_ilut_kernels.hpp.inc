@@ -323,95 +323,132 @@ __global__ __launch_bounds__(default_block_size) void threshold_filter(
 }
 
 
-template <typename IndexType>
-__global__ __launch_bounds__(default_block_size) void spgeam_nnz(
-    const IndexType *a_row_ptrs, const IndexType *a_col_idxs,
-    const IndexType *b_row_ptrs, const IndexType *b_col_idxs,
-    IndexType num_rows, IndexType *nnz)
+template <typename IndexType, typename Callback>
+__device__ void abstract_spgeam(const IndexType *a_row_ptrs,
+                                const IndexType *a_col_idxs,
+                                const IndexType *b_row_ptrs,
+                                const IndexType *lu_col_idxs, IndexType row,
+                                Callback acc)
 {
     constexpr auto sentinel = device_numeric_limits<IndexType>::max;
+
+    const auto a_begin = a_row_ptrs[row];
+    const auto a_end = a_row_ptrs[row + 1];
+    const auto b_begin = b_row_ptrs[row];
+    const auto b_end = b_row_ptrs[row + 1];
+    const auto a_size = a_end - a_begin;
+    const auto b_size = b_end - b_begin;
+    IndexType i{};
+    IndexType col{};
+    auto a_ptr = a_begin;
+    auto b_ptr = b_begin;
+    auto a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
+    auto b_col = b_ptr < b_end ? b_col_idxs[b_ptr] : sentinel;
+    while (i < a_size + b_size) {
+        auto advance_a = (a_col <= b_col);
+        auto advance_b = (b_col <= a_col);
+        auto col = advance_a ? a_col : b_col;
+        acc(advance_a, a_ptr, advance_b, b_ptr, col);
+        a_ptr += advance_a;
+        b_ptr += advance_b;
+        i += advance_a + advance_b;
+        a_col = a_ptr < a_end ? a_col_idxs[a_ptr + 1] : sentinel;
+        b_col = b_ptr < b_end ? b_col_idxs[b_ptr + 1] : sentinel;
+    }
+}
+
+
+template <typename IndexType>
+__global__ __launch_bounds__(default_block_size) void tri_spgeam_nnz(
+    const IndexType *a_row_ptrs, const IndexType *a_col_idxs,
+    const IndexType *lu_row_ptrs, const IndexType *lu_col_idxs,
+    IndexType *s_nnz, IndexType *lr_nnz, IndexType *ur_nnz, IndexType num_rows)
+{
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
         return;
     }
 
-    auto a_begin = a_row_ptrs[row];
-    auto b_begin = b_row_ptrs[row];
-    auto a_end = a_row_ptrs[row + 1];
-    auto b_end = b_row_ptrs[row + 1];
-    auto a_size = a_end - a_begin;
-    auto b_size = b_end - b_begin;
-    auto a_ptr = a_begin;
-    auto b_ptr = b_begin;
-    auto a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
-    auto b_col = b_ptr < b_end ? b_col_idxs[b_ptr] : sentinel;
     IndexType count{};
-    IndexType i{};
-    while (i < a_size + b_size) {
-        auto advance_a = (a_col <= b_col);
-        auto advance_b = (b_col <= a_col);
-        i += advance_a + advance_b;
-        a_ptr += advance_a;
-        b_ptr += advance_b;
-        if (advance_a) {
-            a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
-        }
-        if (advance_b) {
-            b_col = b_ptr < b_end ? b_col_idxs[b_ptr] : sentinel;
-        }
-        ++count;
-    }
-    nnz[row] = count;
+    IndexType lr_count{};
+    IndexType ur_count{};
+    abstract_spgeam(a_row_ptrs, a_col_idxs, lu_row_ptrs, lu_col_idxs, row,
+                    [&](bool, IndexType, bool, IndexType, IndexType col) {
+                        count++;
+                        lr_count += col <= row;
+                        ur_count += col >= row;
+                    });
+    s_nnz[row] = count;
+    lr_nnz[row] = lr_count;
+    ur_nnz[row] = ur_count;
 }
 
 
 template <typename IndexType, typename ValueType>
-__global__ __launch_bounds__(default_block_size) void spgeam(
-    ValueType alpha, const IndexType *a_row_ptrs, const IndexType *a_col_idxs,
-    const ValueType *a_vals, ValueType beta, const IndexType *b_row_ptrs,
-    const IndexType *b_col_idxs, const ValueType *b_vals, IndexType num_rows,
-    const IndexType *c_row_ptrs, IndexType *c_col_idxs, ValueType *c_vals)
+__global__ __launch_bounds__(default_block_size) void tri_spgeam(
+    const IndexType *a_row_ptrs, const IndexType *a_col_idxs,
+    const ValueType *a_vals, const IndexType *lu_row_ptrs,
+    const IndexType *lu_col_idxs, const ValueType *lu_vals,
+    const IndexType *s_row_ptrs, IndexType *s_row_idxs, IndexType *s_col_idxs,
+    ValueType *s_vals, const IndexType *lr_row_ptrs, IndexType *lr_col_idxs,
+    ValueType *lr_vals, const IndexType *ur_row_ptrs, IndexType *ur_col_idxs,
+    ValueType *ur_vals, IndexType num_rows)
 {
-    constexpr auto sentinel = device_numeric_limits<IndexType>::max;
     auto row = threadIdx.x + blockDim.x * blockIdx.x;
     if (row >= num_rows) {
         return;
     }
 
-    auto a_begin = a_row_ptrs[row];
-    auto b_begin = b_row_ptrs[row];
-    auto c_begin = c_row_ptrs[row];
-    auto a_end = a_row_ptrs[row + 1];
-    auto b_end = b_row_ptrs[row + 1];
-    auto a_size = a_end - a_begin;
-    auto b_size = b_end - b_begin;
-    auto a_ptr = a_begin;
-    auto b_ptr = b_begin;
-    auto a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
-    auto b_col = b_ptr < b_end ? b_col_idxs[b_ptr] : sentinel;
-    IndexType count{};
-    IndexType i{};
-    IndexType c_col{};
-    while (i < a_size + b_size) {
-        auto advance_a = (a_col <= b_col);
-        auto advance_b = (b_col <= a_col);
-        c_col = advance_a ? a_col : b_col;
-        i += advance_a + advance_b;
-        a_ptr += advance_a;
-        b_ptr += advance_b;
-        ValueType c_val{};
-        if (advance_a) {
-            a_col = a_ptr < a_end ? a_col_idxs[a_ptr] : sentinel;
-            c_val += alpha * a_vals[a_ptr - 1];
-        }
-        if (advance_b) {
-            b_col = b_ptr < b_end ? b_col_idxs[b_ptr] : sentinel;
-            c_val += beta * b_vals[b_ptr - 1];
-        }
-        c_col_idxs[c_begin + count] = c_col;
-        c_vals[c_begin + count] = c_val;
-        ++count;
+    auto s_ptr = s_row_ptrs[row];
+    auto lr_ptr = lr_row_ptrs[row];
+    auto ur_ptr = ur_row_ptrs[row];
+    abstract_spgeam(a_row_ptrs, a_col_idxs, lu_row_ptrs, lu_col_idxs, row,
+                    [&](bool use_a, IndexType a_ptr, bool use_lu,
+                        IndexType lu_ptr, IndexType col) {
+                        auto a_val = use_a ? a_vals[a_ptr] : zero<ValueType>();
+                        auto lu_val =
+                            use_lu ? lu_vals[lu_ptr] : zero<ValueType>();
+                        s_row_idxs[s_ptr] = row;
+                        s_col_idxs[s_ptr] = col;
+                        s_vals[s_ptr] = a_val;
+                        s_ptr++;
+                        if (col <= row) {
+                            lr_col_idxs[lr_ptr] = col;
+                            lr_vals[lr_ptr] = a_val - lu_val;
+                            lr_ptr++;
+                        }
+                        if (col >= row) {
+                            ur_col_idxs[ur_ptr] = col;
+                            ur_vals[ur_ptr] = a_val - lu_val;
+                            ur_ptr++;
+                        }
+                    });
+}
+
+
+template <typename IndexType, typename ValueType>
+__global__ __launch_bounds__(default_block_size) void tri_spgeam_init(
+    const IndexType *t_row_ptrs, const IndexType *t_col_idxs,
+    const ValueType *t_vals, const IndexType *tr_row_ptrs,
+    const IndexType *tr_col_idxs, const ValueType *tr_vals,
+    const IndexType *o_row_ptrs, const ValueType *o_vals, ValueType *t_new_vals,
+    IndexType num_rows, bool is_lower)
+{
+    auto row = threadIdx.x + blockDim.x * blockIdx.x;
+    if (row >= num_rows) {
+        return;
     }
+
+    abstract_spgeam(t_row_ptrs, t_col_idxs, tr_row_ptrs, tr_col_idxs, row,
+                    [&](bool use_t, IndexType t_ptr, bool /* use_tr */,
+                        IndexType tr_ptr, IndexType col) {
+                        // assert use_tr
+                        auto val = use_t ? t_vals[t_ptr] : tr_vals[tr_ptr];
+                        auto diag_idx = is_lower ? o_row_ptrs[col + 1] - 1
+                                                 : o_row_ptrs[col];
+                        auto diag = use_t ? one<ValueType>() : o_vals[diag_idx];
+                        t_new_vals[tr_ptr] = val / diag;
+                    });
 }
 
 
