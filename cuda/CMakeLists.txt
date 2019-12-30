@@ -79,6 +79,7 @@ target_sources(ginkgo_cuda
         preconditioner/jacobi_kernels.cu
         preconditioner/jacobi_simple_apply_kernel.cu
         reorder/rcm_kernels.cu
+        reorder/metis_fill_reduce_kernels.cu
         solver/bicgstab_kernels.cu
         solver/cg_kernels.cu
         solver/cgs_kernels.cu
@@ -113,6 +114,10 @@ target_link_libraries(ginkgo_cuda PRIVATE ${CUDA_LIBS} ${CUDA_RUNTIME_LIBS} ${CU
 
 # Need to link against ginkgo_hip for the `raw_copy_to(HipExecutor ...)` method
 target_link_libraries(ginkgo_cuda PUBLIC ginkgo_hip)
+if (GINKGO_HAVE_METIS)
+  target_link_libraries(ginkgo_cuda PUBLIC METIS::METIS)
+  # target_include_directories(ginkgo_cuda PRIVATE ${METIS_INCLUDE_DIR})
+endif()
 
 cas_target_cuda_architectures(ginkgo_cuda
     ARCHITECTURES ${GINKGO_CUDA_ARCHITECTURES}
