@@ -33,7 +33,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/reorder/rcm_kernels.hpp"
 
 
+#include <bits/stdc++.h>
+#include <algorithm>
+#include <iterator>
 #include <memory>
+#include <queue>
+#include <utility>
 #include <vector>
 
 
@@ -51,9 +56,9 @@ namespace gko {
 namespace kernels {
 namespace omp {
 /**
- * @brief The parallel ILU factorization namespace.
+ * @brief The reordering namespace.
  *
- * @ingroup factor
+ * @ingroup reorder
  */
 namespace rcm {
 
@@ -64,13 +69,28 @@ void get_degree_of_nodes(
     std::shared_ptr<matrix::SparsityCsr<ValueType, IndexType>> adjacency_matrix,
     std::shared_ptr<gko::Array<IndexType>> node_degrees)
 {
+    auto num_rows = adjacency_matrix->get_size()[0];
     auto adj_ptrs = adjacency_matrix->get_row_ptrs();
-    auto adj_idxs = adjacency_matrix->get_col_idxs();
     auto node_deg = node_degrees->get_data();
+
+#pragma omp parallel for
+    for (auto i = 0; i < num_rows; ++i) {
+        node_deg[i] = adj_ptrs[i + 1] - adj_ptrs[i];
+    }
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
     GKO_DECLARE_RCM_GET_DEGREE_OF_NODES_KERNEL);
+
+
+template <typename IndexType>
+IndexType find_index(std::vector<std::pair<IndexType, IndexType>> &a,
+                     IndexType x)
+{
+    for (auto i = 0; i < a.size(); i++)
+        if (a[i].first == x) return i;
+    return -1;
+}
 
 
 template <typename ValueType, typename IndexType>
@@ -87,6 +107,59 @@ void get_permutation(
     auto node_deg = node_degrees->get_data();
     auto permutation_arr = permutation_mat->get_permutation();
     auto inv_permutation_arr = inv_permutation_mat->get_permutation();
+
+    std::queue<IndexType> q;
+    std::vector<IndexType> r;
+    std::vector<std::pair<IndexType, IndexType>> not_visited;
+
+    for (auto i = 0; i < num_vtxs; ++i) {
+        not_visited.push_back(std::make_pair(i, node_deg[i]));
+    }
+
+    while (not_visited.size()) {
+        // choose this better.
+        IndexType min_node_index = 0;
+
+        for (auto i = 0; i < not_visited.size(); i++) {
+            if (not_visited[i].second < not_visited[min_node_index].second) {
+                min_node_index = i;
+            }
+        }
+        q.push(not_visited[min_node_index].first);
+
+        not_visited.erase(
+            not_visited.begin() +
+            find_index(not_visited, not_visited[q.front()].first));
+
+        // Simple BFS
+        while (!q.empty()) {
+            std::vector<IndexType> to_sort;
+
+            for (IndexType i = 0; i < num_vtxs; i++) {
+                if (i != q.front() && find_index(not_visited, i) != -1) {
+                    to_sort.push_back(i);
+                    not_visited.erase(not_visited.begin() +
+                                      find_index(not_visited, i));
+                }
+            }
+
+            std::sort(to_sort.begin(), to_sort.end(),
+                      [&node_deg](int i, int j) {
+                          return node_deg[i] < node_deg[j];
+                      });
+
+            for (auto i = 0; i < to_sort.size(); i++) q.push(to_sort[i]);
+
+            r.push_back(q.front());
+            q.pop();
+        }
+    }
+
+#pragma omp parallel for
+    for (auto i = 0; i < r.size(); ++i) {
+        permutation_arr[i] = r[i];
+        inv_permutation_arr[r[i]] = i;
+    }
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(

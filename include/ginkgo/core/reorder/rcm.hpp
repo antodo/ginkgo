@@ -87,7 +87,8 @@ public:
     using PermutationMatrix = matrix::Permutation<IndexType>;
 
     /**
-     * Gets the system operator (input matrix) of the linear operator.
+     * Gets the adjacency matrix representation of the system operator (input
+     * matrix) of the linear operator.
      *
      * @return the system operator (matrix)
      */
@@ -146,14 +147,14 @@ protected:
     {
         const auto exec = this->get_executor();
         // The adjacency matrix has to be square.
-        GKO_ASSERT_IS_SQUARE_MATRIX(args.adjacency_matrix);
+        GKO_ASSERT_IS_SQUARE_MATRIX(args.system_matrix);
         // This is needed because it does not make sense to call the copy and
         // convert if the existing matrix is empty.
-        if (!args.adjacency_matrix->get_size()) {
+        if (!args.system_matrix->get_size()) {
             adjacency_matrix_ = SparsityMatrix::create(exec);
         } else {
-            auto tmp = copy_and_convert_to<SparsityMatrix>(
-                exec, args.adjacency_matrix);
+            auto tmp =
+                copy_and_convert_to<SparsityMatrix>(exec, args.system_matrix);
             // This function provided within the Sparsity matrix format removes
             // the diagonal elements and outputs an adjacency matrix.
             adjacency_matrix_ = tmp->to_adjacency_matrix();

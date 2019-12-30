@@ -42,16 +42,15 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include <ginkgo/core/base/executor.hpp>
-#include <ginkgo/core/base/metis_types.hpp>
 #include <ginkgo/core/matrix/csr.hpp>
 #include <ginkgo/core/matrix/dense.hpp>
 #include <ginkgo/core/matrix/permutation.hpp>
 
 
+#include <iostream>
 #include "core/test/utils.hpp"
 #include "core/test/utils/assertions.hpp"
 #include "matrices/config.hpp"
-
 
 namespace {
 
@@ -59,18 +58,18 @@ namespace {
 class Rcm : public ::testing::Test {
 protected:
     using v_type = double;
-    using i_type = metis_indextype;
+    using i_type = int;
     using Mtx = gko::matrix::Dense<v_type>;
     using CsrMtx = gko::matrix::Csr<v_type, i_type>;
     using reorder_type = gko::reorder::Rcm<v_type, i_type>;
     Rcm()
         : ref(gko::ReferenceExecutor::create()),
           omp(gko::OmpExecutor::create()),
-          ani4_mtx(gko::read<CsrMtx>(
-              std::ifstream(gko::matrices::location_ani4_mtx, std::ios::in),
+          o_1138_bus_mtx(gko::read<CsrMtx>(
+              std::ifstream(gko::matrices::location_1138_bus_mtx, std::ios::in),
               ref)),
-          d_ani4_mtx(gko::read<CsrMtx>(
-              std::ifstream(gko::matrices::location_ani4_mtx, std::ios::in),
+          d_1138_bus_mtx(gko::read<CsrMtx>(
+              std::ifstream(gko::matrices::location_1138_bus_mtx, std::ios::in),
               omp))
     {}
 
@@ -90,16 +89,16 @@ protected:
 
     std::shared_ptr<const gko::Executor> ref;
     std::shared_ptr<const gko::Executor> omp;
-    std::shared_ptr<CsrMtx> ani4_mtx;
-    std::shared_ptr<CsrMtx> d_ani4_mtx;
+    std::shared_ptr<CsrMtx> o_1138_bus_mtx;
+    std::shared_ptr<CsrMtx> d_1138_bus_mtx;
     std::unique_ptr<reorder_type> reorder_op;
     std::unique_ptr<reorder_type> d_reorder_op;
 };
 
 TEST_F(Rcm, OmpPermutationIsEquivalentToRef)
 {
-    auto reorder_op = reorder_type::build().on(ref)->generate(ani4_mtx);
-    auto d_reorder_op = reorder_type::build().on(omp)->generate(ani4_mtx);
+    reorder_op = reorder_type::build().on(ref)->generate(o_1138_bus_mtx);
+    d_reorder_op = reorder_type::build().on(omp)->generate(d_1138_bus_mtx);
 
     auto perm = reorder_op->get_permutation();
     auto d_perm = d_reorder_op->get_permutation();

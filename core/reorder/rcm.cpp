@@ -50,7 +50,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "core/matrix/csr_kernels.hpp"
 #include "core/reorder/rcm_kernels.hpp"
 
-#include <iostream>
 
 namespace gko {
 namespace reorder {
@@ -69,7 +68,8 @@ void Rcm<ValueType, IndexType>::generate() const
 {
     IndexType num_rows = adjacency_matrix_->get_size()[0];
     const auto exec = this->get_executor();
-
+    // RCM is only valid for symmetric matrices. Need to add an expensive check
+    // for symmetricity here ?
     exec->run(rcm::make_get_degree_of_nodes(adjacency_matrix_, node_degrees_));
     exec->run(rcm::make_get_permutation(num_rows, adjacency_matrix_,
                                         node_degrees_, permutation_,

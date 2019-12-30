@@ -42,6 +42,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <utility>
 #include <vector>
 
+
 #include <ginkgo/config.hpp>
 #include <ginkgo/core/base/array.hpp>
 #include <ginkgo/core/base/math.hpp>
@@ -56,7 +57,7 @@ namespace gko {
 namespace kernels {
 namespace reference {
 /**
- * @brief The metis fill reduce namespace.
+ * @brief The reordering namespace.
  *
  * @ingroup reorder
  */
@@ -73,7 +74,6 @@ void get_degree_of_nodes(
     auto adj_ptrs = adjacency_matrix->get_row_ptrs();
     auto node_deg = node_degrees->get_data();
 
-    // For symmetric matrices only. TODO: Adapt for non-symmetric matrices.
     for (auto i = 0; i < num_rows; ++i) {
         node_deg[i] = adj_ptrs[i + 1] - adj_ptrs[i];
     }
@@ -84,8 +84,8 @@ GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
 
 
 template <typename IndexType>
-IndexType findIndex(std::vector<std::pair<IndexType, IndexType>> &a,
-                    IndexType x)
+IndexType find_index(std::vector<std::pair<IndexType, IndexType>> &a,
+                     IndexType x)
 {
     for (auto i = 0; i < a.size(); i++)
         if (a[i].first == x) return i;
@@ -118,35 +118,37 @@ void get_permutation(
 
     while (not_visited.size()) {
         // choose this better.
-        IndexType minNodeIndex = 0;
+        IndexType min_node_index = 0;
 
         for (auto i = 0; i < not_visited.size(); i++) {
-            if (not_visited[i].second < not_visited[minNodeIndex].second) {
-                minNodeIndex = i;
+            if (not_visited[i].second < not_visited[min_node_index].second) {
+                min_node_index = i;
             }
         }
-        q.push(not_visited[minNodeIndex].first);
+        q.push(not_visited[min_node_index].first);
 
-        not_visited.erase(not_visited.begin() +
-                          findIndex(not_visited, not_visited[q.front()].first));
+        not_visited.erase(
+            not_visited.begin() +
+            find_index(not_visited, not_visited[q.front()].first));
 
         // Simple BFS
         while (!q.empty()) {
-            std::vector<IndexType> toSort;
+            std::vector<IndexType> to_sort;
 
             for (IndexType i = 0; i < num_vtxs; i++) {
-                if (i != q.front() && findIndex(not_visited, i) != -1) {
-                    toSort.push_back(i);
+                if (i != q.front() && find_index(not_visited, i) != -1) {
+                    to_sort.push_back(i);
                     not_visited.erase(not_visited.begin() +
-                                      findIndex(not_visited, i));
+                                      find_index(not_visited, i));
                 }
             }
 
-            std::sort(toSort.begin(), toSort.end(), [&node_deg](int i, int j) {
-                return node_deg[i] - node_deg[j];
-            });
+            std::sort(to_sort.begin(), to_sort.end(),
+                      [&node_deg](IndexType i, IndexType j) {
+                          return node_deg[i] < node_deg[j];
+                      });
 
-            for (auto i = 0; i < toSort.size(); i++) q.push(toSort[i]);
+            for (auto i = 0; i < to_sort.size(); i++) q.push(to_sort[i]);
 
             r.push_back(q.front());
             q.pop();

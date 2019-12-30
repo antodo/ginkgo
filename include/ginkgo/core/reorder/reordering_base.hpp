@@ -73,10 +73,10 @@ protected:
  * ComponentsType of ReorderingBaseFactory.
  */
 struct ReorderingBaseArgs {
-    std::shared_ptr<LinOp> adjacency_matrix;
+    std::shared_ptr<LinOp> system_matrix;
 
-    ReorderingBaseArgs(std::shared_ptr<LinOp> adjacency_matrix)
-        : adjacency_matrix{adjacency_matrix}
+    ReorderingBaseArgs(std::shared_ptr<LinOp> system_matrix)
+        : system_matrix{system_matrix}
     {}
 };
 
