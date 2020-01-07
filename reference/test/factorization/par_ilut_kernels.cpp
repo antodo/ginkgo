@@ -224,6 +224,7 @@ TEST_F(ParIlut, KernelThresholdFilterNone)
                                new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx1, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1, res_mtx);
 }
 
 
@@ -241,6 +242,7 @@ TEST_F(ParIlut, KernelThresholdFilterSomeAtThreshold)
                                new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx1_expect_thrm2, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_expect_thrm2, res_mtx);
 }
 
 
@@ -257,6 +259,7 @@ TEST_F(ParIlut, KernelThresholdFilterSomeAboveThreshold)
                                new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx1_expect_thrm3, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_expect_thrm3, res_mtx);
 }
 
 
@@ -274,6 +277,7 @@ TEST_F(ParIlut, KernelComplexThresholdFilterNone)
                                       new_col_idxs, new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx1_complex, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_complex, res_mtx);
 }
 
 
@@ -291,6 +295,7 @@ TEST_F(ParIlut, KernelComplexThresholdFilterSomeAtThreshold)
                                       new_col_idxs, new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx1_expect_complex_thrm, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx1_expect_complex_thrm, res_mtx);
 }
 
 
@@ -309,6 +314,7 @@ TEST_F(ParIlut, KernelSpGeAM)
                                new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx23_expect_geam, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx23_expect_geam, res_mtx);
 }
 
 
@@ -327,6 +333,7 @@ TEST_F(ParIlut, KernelSpGeAMWithZeroAlpha)
                                new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx3, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx3, res_mtx);
 }
 
 
@@ -345,6 +352,7 @@ TEST_F(ParIlut, KernelSpGeAMWithZeroBeta)
                                new_row_ptrs);
 
     GKO_ASSERT_MTX_NEAR(mtx2, res_mtx, 0);
+    GKO_ASSERT_MTX_EQ_SPARSITY(mtx2, res_mtx);
 }
 
 
