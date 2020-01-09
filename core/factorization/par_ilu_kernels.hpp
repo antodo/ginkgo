@@ -55,18 +55,20 @@ namespace kernels {
         std::shared_ptr<const DefaultExecutor> exec,                  \
         const matrix::Csr<ValueType, IndexType> *system_matrix,       \
         IndexType *l_row_ptrs, IndexType *u_row_ptrs)
-#define GKO_DECLARE_PAR_ILU_INITIALIZE_L_U_KERNEL(ValueType, IndexType) \
-    void initialize_l_u(                                                \
-        std::shared_ptr<const DefaultExecutor> exec,                    \
-        const matrix::Csr<ValueType, IndexType> *system_matrix,         \
-        matrix::Csr<ValueType, IndexType> *l_factor,                    \
-        matrix::Csr<ValueType, IndexType> *u_factor)
-#define GKO_DECLARE_PAR_ILU_COMPUTE_L_U_FACTORS_KERNEL(ValueType, IndexType) \
-    void compute_l_u_factors(                                                \
-        std::shared_ptr<const DefaultExecutor> exec, size_type iterations,   \
-        const matrix::Coo<ValueType, IndexType> *system_matrix,              \
-        matrix::Csr<ValueType, IndexType> *l_factor,                         \
-        matrix::Csr<ValueType, IndexType> *u_factor)
+#define GKO_DECLARE_PAR_ILU_INITIALIZE_L_U_KERNEL(ValueType, IndexType)        \
+    void initialize_l_u(                                                       \
+        std::shared_ptr<const DefaultExecutor> exec,                           \
+        const matrix::Csr<ValueType, IndexType> *system_matrix,                \
+        const IndexType *l_row_ptrs, IndexType *l_col_idxs, ValueType *l_vals, \
+        const IndexType *u_row_ptrs, IndexType *u_col_idxs, ValueType *u_vals)
+#define GKO_DECLARE_PAR_ILU_COMPUTE_L_U_FACTORS_KERNEL(ValueType, IndexType)   \
+    void compute_l_u_factors(std::shared_ptr<const DefaultExecutor> exec,      \
+                             size_type iterations, const IndexType *a_rows,    \
+                             const IndexType *a_cols, const ValueType *a_vals, \
+                             const IndexType *l_row_ptrs,                      \
+                             const IndexType *l_col_idxs, ValueType *l_vals,   \
+                             const IndexType *u_row_ptrs,                      \
+                             const IndexType *u_col_idxs, ValueType *u_vals)
 
 
 #define GKO_DECLARE_ALL_AS_TEMPLATES                                          \

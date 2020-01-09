@@ -162,6 +162,8 @@ public:
          * The exact selection needs more time, but more closely fulfills the
          * `fill_in_limit` except for pathological cases (many candidates with
          * equal magnitude).
+         *
+         * The default behavior is to use approximate selection.
          */
         bool GKO_FACTORY_PARAMETER(approximate_select, true);
 
@@ -179,8 +181,10 @@ public:
          * Note that even though the threshold selection step may be made
          * deterministic this way, the calculation of the ILU factors can still
          * be non-deterministic due to its parallel implementation.
+         *
+         * The default behavior is to use a random sample.
          */
-        bool GKO_FACTORY_PARAMETER(deterministic_sample, true);
+        bool GKO_FACTORY_PARAMETER(deterministic_sample, false);
 
         /**
          * @brief the amount of fill-in that is allowed in L and U compared to
@@ -191,8 +195,25 @@ public:
          * `fill_in_limit` times the number of non-zeros of the ILU(0)
          * factorization. This selection is executed separately for both
          * factors L and U.
+         *
+         * The default value `2.0` allows twice the number of non-zeros in
+         * L and U compared to ILU(0).
          */
         double GKO_FACTORY_PARAMETER(fill_in_limit, 2.0);
+
+        /**
+         * Strategy which will be used by the L matrix. The default value
+         * `nullptr` will result in the strategy `classical`.
+         */
+        std::shared_ptr<typename l_matrix_type::strategy_type>
+            GKO_FACTORY_PARAMETER(l_strategy, nullptr);
+
+        /**
+         * Strategy which will be used by the U matrix. The default value
+         * `nullptr` will result in the strategy `classical`.
+         */
+        std::shared_ptr<typename u_matrix_type::strategy_type>
+            GKO_FACTORY_PARAMETER(u_strategy, nullptr);
     };
     GKO_ENABLE_LIN_OP_FACTORY(ParIlut, parameters, Factory);
     GKO_ENABLE_BUILD_METHOD(Factory);
@@ -203,7 +224,15 @@ protected:
         : Composition<ValueType>(factory->get_executor()),
           parameters_{factory->get_parameters()}
     {
-        generate_l_u(system_matrix, parameters_.skip_sorting)->move_to(this);
+        if (parameters_.l_strategy == nullptr) {
+            parameters_.l_strategy =
+                std::make_shared<typename l_matrix_type::classical>();
+        }
+        if (parameters_.u_strategy == nullptr) {
+            parameters_.u_strategy =
+                std::make_shared<typename u_matrix_type::classical>();
+        }
+        generate_l_u(std::move(system_matrix))->move_to(this);
     }
 
     /**
@@ -215,15 +244,11 @@ protected:
      * @param system_matrix  the source matrix used to generate the factors.
      *                       @note: system_matrix must be convertable to a Csr
      *                              Matrix, otherwise, an exception is thrown.
-     * @param skip_sorting  if set to `true`, the sorting will be skipped.
-     *                      @note: If the matrix is not sorted, the
-     *                             factorization fails.
      * @return  A Composition, containing the incomplete LU factors for the
      *          given system_matrix (first element is L, then U)
      */
     std::unique_ptr<Composition<ValueType>> generate_l_u(
-        const std::shared_ptr<const LinOp> &system_matrix,
-        bool skip_sorting) const;
+        const std::shared_ptr<const LinOp> &system_matrix) const;
 };
 
 

@@ -94,8 +94,9 @@ GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
 template <typename ValueType, typename IndexType>
 void initialize_l_u(std::shared_ptr<const HipExecutor> exec,
                     const matrix::Csr<ValueType, IndexType> *system_matrix,
-                    matrix::Csr<ValueType, IndexType> *csr_l,
-                    matrix::Csr<ValueType, IndexType> *csr_u)
+                    const IndexType *l_row_ptrs, IndexType *l_col_idxs,
+                    ValueType *l_vals, const IndexType *u_row_ptrs,
+                    IndexType *u_col_idxs, ValueType *u_vals)
 {
     const size_type num_rows{system_matrix->get_size()[0]};
     const dim3 block_size{default_block_size, 1, 1};
@@ -103,15 +104,12 @@ void initialize_l_u(std::shared_ptr<const HipExecutor> exec,
                             num_rows, static_cast<size_type>(block_size.x))),
                         1, 1};
 
-    hipLaunchKernelGGL(
-        kernel::initialize_l_u, dim3(grid_dim), dim3(block_size), 0, 0,
-        num_rows, as_hip_type(system_matrix->get_const_row_ptrs()),
-        as_hip_type(system_matrix->get_const_col_idxs()),
-        as_hip_type(system_matrix->get_const_values()),
-        as_hip_type(csr_l->get_const_row_ptrs()),
-        as_hip_type(csr_l->get_col_idxs()), as_hip_type(csr_l->get_values()),
-        as_hip_type(csr_u->get_const_row_ptrs()),
-        as_hip_type(csr_u->get_col_idxs()), as_hip_type(csr_u->get_values()));
+    hipLaunchKernelGGL(kernel::initialize_l_u, dim3(grid_dim), dim3(block_size),
+                       0, 0, num_rows, system_matrix->get_const_row_ptrs(),
+                       system_matrix->get_const_col_idxs(),
+                       as_hip_type(system_matrix->get_const_values()),
+                       l_row_ptrs, l_col_idxs, as_hip_type(l_vals), u_row_ptrs,
+                       u_col_idxs, as_hip_type(u_vals));
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
