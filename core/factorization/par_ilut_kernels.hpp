@@ -59,23 +59,12 @@ namespace kernels {
                           Array<IndexType> &new_row_ptrs_array,            \
                           Array<IndexType> &new_col_idxs_array,            \
                           Array<ValueType> &new_vals_array, bool is_lower)
-#define GKO_DECLARE_PAR_ILUT_SPGEAM_KERNEL(ValueType, IndexType) \
-    void spgeam(std::shared_ptr<const DefaultExecutor> exec,     \
-                const matrix::Dense<ValueType> *alpha,           \
-                const matrix::Csr<ValueType, IndexType> *a,      \
-                const matrix::Dense<ValueType> *beta,            \
-                const matrix::Csr<ValueType, IndexType> *b,      \
-                Array<IndexType> &c_row_ptrs_array,              \
-                Array<IndexType> &c_col_idxs_array,              \
-                Array<ValueType> &c_vals_array)
 
 #define GKO_DECLARE_ALL_AS_TEMPLATES                                    \
     template <typename ValueType, typename IndexType>                   \
     GKO_DECLARE_PAR_ILUT_THRESHOLD_SELECT_KERNEL(ValueType, IndexType); \
     template <typename ValueType, typename IndexType>                   \
-    GKO_DECLARE_PAR_ILUT_THRESHOLD_FILTER_KERNEL(ValueType, IndexType); \
-    template <typename ValueType, typename IndexType>                   \
-    GKO_DECLARE_PAR_ILUT_SPGEAM_KERNEL(ValueType, IndexType)
+    GKO_DECLARE_PAR_ILUT_THRESHOLD_FILTER_KERNEL(ValueType, IndexType)
 
 
 namespace omp {

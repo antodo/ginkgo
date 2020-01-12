@@ -56,8 +56,6 @@ namespace par_ilut_factorization {
 
 GKO_REGISTER_OPERATION(threshold_filter,
                        par_ilut_factorization::threshold_filter);
-GKO_REGISTER_OPERATION(spgeam, par_ilut_factorization::spgeam);
-
 
 GKO_REGISTER_OPERATION(initialize_row_ptrs_l_u,
                        par_ilu_factorization::initialize_row_ptrs_l_u);
@@ -103,11 +101,12 @@ public:
     std::unique_ptr<Composition<ValueType>> to_factors() {}
 };
 
-void iterate()
+void iterate();
 
-    template <typename ValueType, typename IndexType>
-    std::unique_ptr<Composition<ValueType>> ParIlut<ValueType, IndexType>::
-        generate_l_u(const std::shared_ptr<const LinOp> &system_matrix) const
+template <typename ValueType, typename IndexType>
+std::unique_ptr<Composition<ValueType>>
+ParIlut<ValueType, IndexType>::generate_l_u(
+    const std::shared_ptr<const LinOp> &system_matrix) const
 {
     using CsrMatrix = matrix::Csr<ValueType, IndexType>;
     using CooMatrix = matrix::Coo<ValueType, IndexType>;
@@ -130,7 +129,7 @@ void iterate()
         csr_system_matrix = csr_system_matrix_unique_ptr.get();
     }
     // If it needs to be sorted, copy it if necessary and sort it
-    if (!_parameters.skip_sorting) {
+    if (!parameters_.skip_sorting) {
         if (csr_system_matrix_unique_ptr == nullptr) {
             csr_system_matrix_unique_ptr = CsrMatrix::create(exec);
             csr_system_matrix_unique_ptr->copy_from(csr_system_matrix);
@@ -143,7 +142,7 @@ void iterate()
     const auto number_rows = matrix_size[0];
     Array<IndexType> l_row_ptrs{exec, number_rows + 1};
     Array<IndexType> u_row_ptrs{exec, number_rows + 1};
-    exec->run(par_ilu_factorization::make_initialize_row_ptrs_l_u(
+    exec->run(make_initialize_row_ptrs_l_u(
         csr_system_matrix, l_row_ptrs.get_data(), u_row_ptrs.get_data()));
 
     IndexType l_nnz_it;
@@ -163,13 +162,13 @@ void iterate()
     Array<IndexType> u_col_idxs_array{exec, u_nnz};
     Array<ValueType> u_vals_array{exec, u_nnz};
 
-    exec->run(par_ilu_factorization::make_initialize_l_u(
+    /*exec->run(par_ilu_factorization::make_initialize_l_u(
         csr_system_matrix, l_factor.get(), u_factor.get()));
 
-    for (size_type iteration = 0; iteration < _parameters.iterations;
+    for (size_type iteration = 0; iteration < parameters_.iterations;
          ++iteration) {
         exec->run(par_ilut_factorization::make_)
-    }
+    }*/
 }
 
 }  // namespace factorization

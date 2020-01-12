@@ -367,20 +367,6 @@ TEST_F(Csr, SimpleApplyToCsrMatrixIsEquivalentToRef)
 }
 
 
-TEST_F(Csr, AdvancedApplyToCsrMatrixIsEquivalentToRef)
-{
-    set_up_apply_data(std::make_shared<Mtx::automatical>());
-    auto trans = mtx->transpose();
-    auto d_trans = dmtx->transpose();
-
-    mtx->apply(alpha.get(), trans.get(), beta.get(), square_mtx.get());
-    dmtx->apply(dalpha.get(), d_trans.get(), dbeta.get(), square_dmtx.get());
-
-    GKO_ASSERT_MTX_NEAR(square_dmtx, square_mtx, 1e-14);
-    GKO_ASSERT_MTX_EQ_SPARSITY(square_dmtx, square_mtx);
-}
-
-
 TEST_F(Csr, TransposeIsEquivalentToRef)
 {
     set_up_apply_data(std::make_shared<Mtx::automatical>(hip));

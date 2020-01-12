@@ -245,7 +245,7 @@ __global__ __launch_bounds__(basecase_block_size) void basecase_select(
 
 template <typename IndexType, typename ValueType, typename BeginCallback,
           typename StepCallback, typename FinishCallback>
-__device__ __launch_bounds__(default_block_size) void abstract_threshold_filter(
+__device__ void abstract_threshold_filter(
     const IndexType *row_ptrs, const ValueType *vals, IndexType num_rows,
     remove_complex<ValueType> threshold, bool is_lower, BeginCallback begin_cb,
     StepCallback step_cb, FinishCallback finish_cb)
@@ -327,7 +327,7 @@ template <typename IndexType, typename Callback>
 __device__ void abstract_spgeam(const IndexType *a_row_ptrs,
                                 const IndexType *a_col_idxs,
                                 const IndexType *b_row_ptrs,
-                                const IndexType *lu_col_idxs, IndexType row,
+                                const IndexType *b_col_idxs, IndexType row,
                                 Callback acc)
 {
     constexpr auto sentinel = device_numeric_limits<IndexType>::max;

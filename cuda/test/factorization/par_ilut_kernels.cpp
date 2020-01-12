@@ -171,38 +171,6 @@ protected:
         GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
     }
 
-    template <typename Mtx, typename DenseMtx>
-    void test_spgeam(const std::unique_ptr<Mtx> &mtxa,
-                     const std::unique_ptr<Mtx> &mtxb,
-                     const std::unique_ptr<DenseMtx> &a,
-                     const std::unique_ptr<DenseMtx> &b,
-                     const std::unique_ptr<Mtx> &dmtxa,
-                     const std::unique_ptr<Mtx> &dmtxb,
-                     const std::unique_ptr<DenseMtx> &da,
-                     const std::unique_ptr<DenseMtx> &db)
-    {
-        gko::Array<index_type> new_row_ptrs(ref);
-        gko::Array<index_type> new_col_idxs(ref);
-        gko::Array<typename Mtx::value_type> new_vals(ref);
-        gko::Array<index_type> dnew_row_ptrs(cuda);
-        gko::Array<index_type> dnew_col_idxs(cuda);
-        gko::Array<typename Mtx::value_type> dnew_vals(cuda);
-
-        gko::kernels::reference::par_ilut_factorization::spgeam(
-            ref, a.get(), mtxa.get(), b.get(), mtxb.get(), new_row_ptrs,
-            new_col_idxs, new_vals);
-        gko::kernels::cuda::par_ilut_factorization::spgeam(
-            cuda, da.get(), dmtxa.get(), db.get(), dmtxb.get(), dnew_row_ptrs,
-            dnew_col_idxs, dnew_vals);
-        auto res =
-            Mtx::create(ref, mtx_size, new_vals, new_col_idxs, new_row_ptrs);
-        auto dres = Mtx::create(cuda, mtx_size, dnew_vals, dnew_col_idxs,
-                                dnew_row_ptrs);
-
-        GKO_ASSERT_MTX_NEAR(res, dres, 1e-14);
-        GKO_ASSERT_MTX_EQ_SPARSITY(res, dres);
-    }
-
     std::shared_ptr<gko::ReferenceExecutor> ref;
     std::shared_ptr<gko::CudaExecutor> cuda;
 
@@ -342,23 +310,5 @@ TEST_F(ParIlut, KernelComplexThresholdFilterAllUpperIsEquivalentToRef)
     test_filter(mtx_u_complex, dmtx_u_complex, 1e6, false);
 }
 
-
-TEST_F(ParIlut, KernelSpGeAMIsEquivalentToRef)
-{
-    test_spgeam(mtx1, mtx2, alpha, beta, dmtx1, dmtx2, dalpha, dbeta);
-}
-
-
-TEST_F(ParIlut, KernelSpGeAMTriangularIsEquivalentToRef)
-{
-    test_spgeam(mtx_l, mtx_u, alpha, beta, dmtx_l, dmtx_u, dalpha, dbeta);
-}
-
-
-TEST_F(ParIlut, KernelComplexSpGeAMTriangularIsEquivalentToRef)
-{
-    test_spgeam(mtx_l_complex, mtx_u_complex, alpha_complex, beta_complex,
-                dmtx_l_complex, dmtx_u_complex, dalpha_complex, dbeta_complex);
-}
 
 }  // namespace

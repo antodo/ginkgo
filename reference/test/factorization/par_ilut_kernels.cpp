@@ -94,22 +94,7 @@ protected:
                {0. * i, .1 - i, -2. + .2 * i, -3. - .1 * i},
                {0. * i, 0. * i, -1. - .3 * i, 0. * i},
                {0. * i, 0. * i, 0. * i, .1 + 2. * i}},
-              ref)),
-          mtx2(gko::initialize<Csr>({{0., 0., -1., -2.},
-                                     {0., 0., 0., -3.},
-                                     {0., 1., 0., 0.},
-                                     {1., -1., 0., 0.}},
-                                    ref)),
-          mtx3(gko::initialize<Csr>({{1., 0., -1., 0.},
-                                     {0., 1., -2., 3.},
-                                     {3., 2., -1., -1.},
-                                     {0., 0., 0., 0.}},
-                                    ref)),
-          mtx23_expect_geam(gko::initialize<Csr>({{-2., 0., 1., -2.},
-                                                  {0., -2., 4., -9.},
-                                                  {-6., -3., 2., 2.},
-                                                  {1., -1., 0., 0.}},
-                                                 ref))
+              ref))
     {}
 
     template <typename Mtx>
@@ -153,9 +138,6 @@ protected:
     std::unique_ptr<Csr> mtx1_expect_thrm3;
     std::unique_ptr<ComplexCsr> mtx1_complex;
     std::unique_ptr<ComplexCsr> mtx1_expect_complex_thrm;
-    std::unique_ptr<Csr> mtx2;
-    std::unique_ptr<Csr> mtx3;
-    std::unique_ptr<Csr> mtx23_expect_geam;
 };
 
 
@@ -210,25 +192,6 @@ TEST_F(ParIlut, KernelComplexThresholdFilterNone)
 TEST_F(ParIlut, KernelComplexThresholdFilterSomeAtThreshold)
 {
     test_filter(mtx1_complex, 1.01, mtx1_expect_complex_thrm);
-}
-
-
-TEST_F(ParIlut, KernelSpGeAM)
-{
-    gko::Array<index_type> new_row_ptrs(exec);
-    gko::Array<index_type> new_col_idxs(exec);
-    gko::Array<value_type> new_vals(exec);
-    auto alpha = gko::initialize<Dense>({1.0}, exec);
-    auto beta = gko::initialize<Dense>({-2.0}, exec);
-
-    gko::kernels::reference::par_ilut_factorization::spgeam(
-        ref, alpha.get(), mtx2.get(), beta.get(), mtx3.get(), new_row_ptrs,
-        new_col_idxs, new_vals);
-    auto res_mtx = Csr::create(exec, mtx1->get_size(), new_vals, new_col_idxs,
-                               new_row_ptrs);
-
-    GKO_ASSERT_MTX_NEAR(mtx23_expect_geam, res_mtx, 0);
-    GKO_ASSERT_MTX_EQ_SPARSITY(mtx23_expect_geam, res_mtx);
 }
 
 
