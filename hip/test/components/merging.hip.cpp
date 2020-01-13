@@ -37,6 +37,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "hip/components/searching.hip.hpp"
 
 
+#include <algorithm>
 #include <memory>
 #include <random>
 
@@ -60,23 +61,106 @@ protected:
         : ref(gko::ReferenceExecutor::create()),
           hip(gko::HipExecutor::create(0, ref)),
           rng(123456),
-          ddata(hip)
+          max_size{1637},
+          sizes{},
+          data1(ref, max_size),
+          data2(ref, max_size),
+          outdata(ref, 2 * max_size),
+          refdata(ref, 2 * max_size),
+          ddata1(hip),
+          ddata2(hip),
+          doutdata(hip, 2 * max_size)
     {}
+
+    void init_data()
+    {
+        std::uniform_int_distribution<gko::int32> dist(0, max_size);
+        for (auto i = 0; i < max_size; ++i) {
+            data1.get_data()[i] = dist(rng);
+            data2.get_data()[i] = dist(rng);
+        }
+        std::sort(data1.get_data(), data1.get_data() + max_size);
+        std::sort(data2.get_data(), data2.get_data() + max_size);
+
+        ddata1 = data1;
+        ddata2 = data2;
+    }
+
+    void assert_eq_ref(int size, int eq_size)
+    {
+        outdata = doutdata;
+        auto out_ptr = outdata.get_const_data();
+        auto out_end = out_ptr + eq_size;
+        auto ref_ptr = refdata.get_data();
+        std::copy_n(data1.get_const_data(), size, ref_ptr);
+        std::copy_n(data2.get_const_data(), size, ref_ptr + size);
+        std::sort(ref_ptr, ref_ptr + 2 * size);
+
+        ASSERT_TRUE(std::equal(out_ptr, out_end, ref_ptr));
+    }
 
     std::shared_ptr<gko::ReferenceExecutor> ref;
     std::shared_ptr<gko::HipExecutor> hip;
     std::default_random_engine rng;
-    gko::Array<gko::int32> ddata;
+
+    int max_size;
+    std::vector<int> sizes;
+    gko::Array<gko::int32> data1;
+    gko::Array<gko::int32> data2;
+    gko::Array<gko::int32> outdata;
+    gko::Array<gko::int32> refdata;
+    gko::Array<gko::int32> ddata1;
+    gko::Array<gko::int32> ddata2;
+    gko::Array<gko::int32> doutdata;
 };
 
 
-TEST_F(Merging, MergeStep) {}
+__global__ test_merge_step(const gko::int32 *a, const gko::int32 *b,
+                           gko::int32 *c)
+{
+    auto warp = tiled_partition<config::warp_size>(this_thread_block());
+    auto i = warp.thread_rank();
+    auto result = kernel::group_merge_step(a[i], b[i], config::warp_size, warp);
+    c[i] = min(result.a_val, result.b_val);
+}
+
+TEST_F(Merging, MergeStep)
+{
+    for (auto i = 0; i < rng_runs; ++i) {
+        init_data();
+        test_merge_step<<<1, config::warp_size>>>(ddata1.get_const_data(),
+                                                  ddata2.get_const_data(),
+                                                  doutdata.get_data());
+
+        assert_eq_ref(config::warp_size, config::warp_size);
+    }
+}
 
 
-TEST_F(Merging, FullMerge) {}
+__global__ test_merge(const gko::int32 *a, const gko::int32 *b, int size,
+                      gko::int32 *c)
+{
+    auto warp = tiled_partition<config::warp_size>(this_thread_block());
+    kernel::group_merge(
+        a, size, b, size, warp,
+        [&](int a_idx, gko::int32 a_val, int b_idx, gko::int32 b_val, int i) {
+            c[i] = min(a_val, b_val);
+        });
+}
 
+TEST_F(Merging, FullMerge)
+{
+    for (auto i = 0; i < rng_runs; ++i) {
+        init_data();
+        for (auto size : sizes) {
+            test_merge_step<<<1, config::warp_size>>>(
+                ddata1.get_const_data(), ddata2.get_const_data(), size,
+                doutdata.get_data());
 
-TEST_F(Merging, EqualFullMerge) {}
+            assert_eq_ref(size, 2 * size);
+        }
+    }
+}
 
 
 }  // namespace
