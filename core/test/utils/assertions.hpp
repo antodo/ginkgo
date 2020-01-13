@@ -34,12 +34,14 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GKO_CORE_TEST_UTILS_ASSERTIONS_HPP_
 
 
-#include <gtest/gtest.h>
 #include <cmath>
 #include <cstdlib>
 #include <initializer_list>
 #include <string>
 #include <type_traits>
+
+
+#include <gtest/gtest.h>
 
 
 #include <ginkgo/core/base/math.hpp>

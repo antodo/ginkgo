@@ -34,12 +34,12 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #define GKO_CORE_SYNTHESIZER_IMPLEMENTATION_SELECTION_HPP_
 
 
+#include <utility>
+
+
 #include <ginkgo/core/base/exception_helpers.hpp>
 #include <ginkgo/core/base/std_extensions.hpp>
 #include <ginkgo/core/synthesizer/containers.hpp>
-
-
-#include <utility>
 
 
 namespace gko {

@@ -30,20 +30,23 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
-
 #include <ginkgo/core/log/papi.hpp>
+
+
+#include <stdexcept>
 
 
 #include <gtest/gtest.h>
 #include <papi.h>
-#include <stdexcept>
 
 
-#include <core/test/utils/assertions.hpp>
 #include <ginkgo/core/base/executor.hpp>
 #include <ginkgo/core/matrix/dense.hpp>
 #include <ginkgo/core/solver/bicgstab.hpp>
 #include <ginkgo/core/stop/iteration.hpp>
+
+
+#include "core/test/utils/assertions.hpp"
 
 
 namespace {
