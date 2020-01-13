@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -78,10 +78,15 @@ protected:
     using Dense = gko::matrix::Dense<value_type>;
     using Coo = gko::matrix::Coo<value_type, index_type>;
     using Csr = gko::matrix::Csr<value_type, index_type>;
+    using par_ilu_type = gko::factorization::ParIlu<value_type, index_type>;
     ParIlu()
         : ref(gko::ReferenceExecutor::create()),
           exec(std::static_pointer_cast<const gko::Executor>(ref)),
           // clang-format off
+          empty_csr(gko::initialize<Csr>(
+              {{0., 0., 0.},
+               {0., 0., 0.},
+               {0., 0., 0.}}, exec)),
           identity(gko::initialize<Dense>(
               {{1., 0., 0.},
                {0., 1., 0.},
@@ -138,24 +143,22 @@ protected:
           big_nodiag_l_expected(gko::initialize<Dense>({{1., 0., 0., 0., 0., 0.},
                                                         {1., 1., 0., 0., 0., 0.},
                                                         {0., 2., 1., 0., 0., 0.},
-                                                        {2., 0., 0., 1., 0., 0.},
-                                                        {1., 1., 0., 1., 1., 0.},
-                                                        {0., 2., 1., 0.25, -0.5, 1.}},
+                                                        {1., 0., 2., 1., 0., 0.},
+                                                        {1., 1., 0., -2., 1., 0.},
+                                                        {0., 2., 1., -0.5, 2.5, 1.}},
                                                 exec)),
           big_nodiag_u_expected(gko::initialize<Dense>({{1., 1., 1., 0., 1., 3.},
                                                         {0., 1., 1., 0., 1., 0.},
-                                                        {0., 0., 1., 3., 1., -2.},
-                                                        {0., 0., 0., 4., 2., 0.},
-                                                        {0., 0., 0., 0., -3., 3.},
-                                                        {0., 0., 0., 0., 0., 11.5}},
+                                                        {0., 0., 1., 3., 1., 5.},
+                                                        {0., 0., 0., -2., 1., -9.},
+                                                        {0., 0., 0., 0., 1., -15.},
+                                                        {0., 0., 0., 0., 0., 36.}},
                                                 exec)),
           // clang-format on
           ilu_factory_skip(
-              gko::factorization::ParIlu<>::build().with_skip_sorting(true).on(
-                  exec)),
+              par_ilu_type::build().with_skip_sorting(true).on(exec)),
           ilu_factory_sort(
-              gko::factorization::ParIlu<>::build().with_skip_sorting(false).on(
-                  exec))
+              par_ilu_type::build().with_skip_sorting(false).on(exec))
     {
         auto tmp_csr = Csr::create(exec);
         mtx_small->convert_to(gko::lend(tmp_csr));
@@ -164,6 +167,7 @@ protected:
 
     std::shared_ptr<const gko::ReferenceExecutor> ref;
     std::shared_ptr<const gko::Executor> exec;
+    std::shared_ptr<const Csr> empty_csr;
     std::shared_ptr<const Dense> identity;
     std::shared_ptr<const Dense> lower_triangular;
     std::shared_ptr<const Dense> upper_triangular;
@@ -177,8 +181,8 @@ protected:
     std::shared_ptr<const Csr> mtx_big_nodiag;
     std::shared_ptr<const Dense> big_nodiag_l_expected;
     std::shared_ptr<const Dense> big_nodiag_u_expected;
-    std::unique_ptr<gko::factorization::ParIlu<>::Factory> ilu_factory_skip;
-    std::unique_ptr<gko::factorization::ParIlu<>::Factory> ilu_factory_sort;
+    std::unique_ptr<par_ilu_type::Factory> ilu_factory_skip;
+    std::unique_ptr<par_ilu_type::Factory> ilu_factory_sort;
 };
 
 
@@ -201,6 +205,28 @@ TEST_F(ParIlu, KernelInitializeRowPtrsLU)
                            small_csr_l_expected->get_const_row_ptrs()));
     ASSERT_TRUE(std::equal(u_row_ptrs, u_row_ptrs + num_row_ptrs,
                            small_csr_u_expected->get_const_row_ptrs()));
+}
+
+
+TEST_F(ParIlu, KernelInitializeRowPtrsLUZeroMatrix)
+{
+    auto empty_csr_l_expected = Csr::create(ref);
+    identity->convert_to(gko::lend(empty_csr_l_expected));
+    auto empty_csr_u_expected = Csr::create(ref);
+    identity->convert_to(gko::lend(empty_csr_u_expected));
+    auto num_row_ptrs = empty_csr->get_size()[0] + 1;
+    std::vector<index_type> l_row_ptrs_vector(num_row_ptrs);
+    std::vector<index_type> u_row_ptrs_vector(num_row_ptrs);
+    auto l_row_ptrs = l_row_ptrs_vector.data();
+    auto u_row_ptrs = u_row_ptrs_vector.data();
+
+    gko::kernels::reference::par_ilu_factorization::initialize_row_ptrs_l_u(
+        ref, gko::lend(empty_csr), l_row_ptrs, u_row_ptrs);
+
+    ASSERT_TRUE(std::equal(l_row_ptrs, l_row_ptrs + num_row_ptrs,
+                           empty_csr_l_expected->get_const_row_ptrs()));
+    ASSERT_TRUE(std::equal(u_row_ptrs, u_row_ptrs + num_row_ptrs,
+                           empty_csr_u_expected->get_const_row_ptrs()));
 }
 
 
@@ -231,6 +257,21 @@ TEST_F(ParIlu, KernelInitializeLU)
 
     GKO_ASSERT_MTX_NEAR(actual_l, expected_l, 1e-14);
     GKO_ASSERT_MTX_NEAR(actual_u, expected_u, 1e-14);
+}
+
+
+TEST_F(ParIlu, KernelInitializeLUZeroMatrix)
+{
+    auto actual_l = Csr::create(ref);
+    auto actual_u = Csr::create(ref);
+    actual_l->copy_from(identity.get());
+    actual_u->copy_from(identity.get());
+
+    gko::kernels::reference::par_ilu_factorization::initialize_l_u(
+        ref, gko::lend(empty_csr), gko::lend(actual_l), gko::lend(actual_u));
+
+    GKO_ASSERT_MTX_NEAR(actual_l, identity, 1e-14);
+    GKO_ASSERT_MTX_NEAR(actual_u, identity, 1e-14);
 }
 
 
@@ -293,6 +334,30 @@ TEST_F(ParIlu, ThrowDimensionMismatch)
 
     ASSERT_THROW(ilu_factory_sort->generate(gko::share(matrix)),
                  gko::DimensionMismatch);
+}
+
+
+TEST_F(ParIlu, SetLStrategy)
+{
+    auto l_strategy = std::make_shared<typename Csr::automatical>(0, 0);
+
+    auto factory = par_ilu_type::build().with_l_strategy(l_strategy).on(ref);
+    auto par_ilu = factory->generate(mtx_small);
+
+    ASSERT_EQ(factory->get_parameters().l_strategy, l_strategy);
+    ASSERT_EQ(par_ilu->get_l_factor()->get_strategy(), l_strategy);
+}
+
+
+TEST_F(ParIlu, SetUStrategy)
+{
+    auto u_strategy = std::make_shared<typename Csr::classical>();
+
+    auto factory = par_ilu_type::build().with_u_strategy(u_strategy).on(ref);
+    auto par_ilu = factory->generate(mtx_small);
+
+    ASSERT_EQ(factory->get_parameters().u_strategy, u_strategy);
+    ASSERT_EQ(par_ilu->get_u_factor()->get_strategy(), u_strategy);
 }
 
 
@@ -422,10 +487,9 @@ TEST_F(ParIlu, GenerateForCsrBigWithDiagonalZeros)
 
 TEST_F(ParIlu, GenerateForDenseSmallWithMultipleIterations)
 {
-    auto multiple_iter_factory = gko::factorization::ParIlu<>::build()
-                                     .with_iterations(5u)
-                                     .with_skip_sorting(true)
-                                     .on(exec);
+    auto multiple_iter_factory =
+        par_ilu_type::build().with_iterations(5u).with_skip_sorting(true).on(
+            exec);
     auto factors = multiple_iter_factory->generate(mtx_small);
     auto l_factor = factors->get_l_factor();
     auto u_factor = factors->get_u_factor();

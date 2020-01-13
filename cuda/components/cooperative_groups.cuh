@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -345,7 +345,7 @@ private:
     template <typename ShuffleOperator, typename ValueType,
               typename SelectorType>
     static __device__ __forceinline__ ValueType
-    shuffle_impl(ShuffleOperator intrinsic_shuffle, const ValueType &var,
+    shuffle_impl(ShuffleOperator intrinsic_shuffle, const ValueType var,
                  SelectorType selector)
     {
         static_assert(sizeof(ValueType) % sizeof(uint32) == 0,

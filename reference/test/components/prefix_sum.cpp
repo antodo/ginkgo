@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -30,20 +30,41 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
+#include "core/components/prefix_sum.hpp"
 
-namespace kernel {
+
+#include <algorithm>
+#include <memory>
+#include <vector>
 
 
-template <typename ValueType>
-__global__ __launch_bounds__(default_block_size) void zero_array(
-    size_type n, ValueType *__restrict__ array)
+#include <gtest/gtest.h>
+
+
+namespace {
+
+
+class PrefixSum : public ::testing::Test {
+protected:
+    using index_type = gko::int32;
+    PrefixSum()
+        : exec(gko::ReferenceExecutor::create()),
+          vals{3, 5, 6, 7, 1, 5, 9, 7, 2, 0, 5},
+          expected{0, 3, 8, 14, 21, 22, 27, 36, 43, 45, 45}
+    {}
+
+    std::shared_ptr<const gko::ReferenceExecutor> exec;
+    std::vector<index_type> vals;
+    std::vector<index_type> expected;
+};
+
+
+TEST_F(PrefixSum, Works)
 {
-    const auto tidx =
-        static_cast<size_type>(blockDim.x) * blockIdx.x + threadIdx.x;
-    if (tidx < n) {
-        array[tidx] = zero<ValueType>();
-    }
+    gko::kernels::reference::prefix_sum(exec, vals.data(), vals.size());
+
+    ASSERT_EQ(vals, expected);
 }
 
 
-}  // namespace kernel
+}  // namespace

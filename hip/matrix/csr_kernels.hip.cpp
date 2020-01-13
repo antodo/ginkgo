@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -49,6 +49,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ginkgo/core/matrix/sellp.hpp>
 
 
+#include "core/components/prefix_sum.hpp"
+#include "core/matrix/csr_builder.hpp"
 #include "core/matrix/dense_kernels.hpp"
 #include "core/synthesizer/implementation_selection.hpp"
 #include "hip/base/config.hip.hpp"
@@ -58,7 +60,6 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include "hip/base/types.hip.hpp"
 #include "hip/components/atomic.hip.hpp"
 #include "hip/components/cooperative_groups.hip.hpp"
-#include "hip/components/prefix_sum.hip.hpp"
 #include "hip/components/reduction.hip.hpp"
 #include "hip/components/segment_scan.hip.hpp"
 #include "hip/components/uninitialized_array.hip.hpp"
@@ -452,8 +453,73 @@ template <typename ValueType, typename IndexType>
 void spgemm(std::shared_ptr<const HipExecutor> exec,
             const matrix::Csr<ValueType, IndexType> *a,
             const matrix::Csr<ValueType, IndexType> *b,
-            Array<IndexType> &c_row_ptrs, Array<IndexType> &c_col_idxs,
-            Array<ValueType> &c_vals) GKO_NOT_IMPLEMENTED;
+            matrix::Csr<ValueType, IndexType> *c)
+{
+    if (hipsparse::is_supported<ValueType, IndexType>::value) {
+        auto handle = exec->get_hipsparse_handle();
+        hipsparse::pointer_mode_guard pm_guard(handle);
+        auto a_descr = hipsparse::create_mat_descr();
+        auto b_descr = hipsparse::create_mat_descr();
+        auto c_descr = hipsparse::create_mat_descr();
+        auto d_descr = hipsparse::create_mat_descr();
+        auto info = hipsparse::create_spgemm_info();
+
+        auto alpha = one<ValueType>();
+        auto a_nnz = IndexType(a->get_num_stored_elements());
+        auto a_vals = a->get_const_values();
+        auto a_row_ptrs = a->get_const_row_ptrs();
+        auto a_col_idxs = a->get_const_col_idxs();
+        auto b_nnz = IndexType(b->get_num_stored_elements());
+        auto b_vals = b->get_const_values();
+        auto b_row_ptrs = b->get_const_row_ptrs();
+        auto b_col_idxs = b->get_const_col_idxs();
+        auto null_value = static_cast<ValueType *>(nullptr);
+        auto null_index = static_cast<IndexType *>(nullptr);
+        auto zero_nnz = IndexType{};
+        auto m = IndexType(a->get_size()[0]);
+        auto n = IndexType(b->get_size()[1]);
+        auto k = IndexType(a->get_size()[1]);
+        auto c_row_ptrs = c->get_row_ptrs();
+        matrix::CsrBuilder<ValueType, IndexType> c_builder{c};
+        auto &c_col_idxs_array = c_builder.get_col_idx_array();
+        auto &c_vals_array = c_builder.get_value_array();
+
+        // allocate buffer
+        size_type buffer_size{};
+        hipsparse::spgemm_buffer_size(
+            handle, m, n, k, &alpha, a_descr, a_nnz, a_row_ptrs, a_col_idxs,
+            b_descr, b_nnz, b_row_ptrs, b_col_idxs, null_value, d_descr,
+            zero_nnz, null_index, null_index, info, buffer_size);
+        Array<char> buffer_array(exec, buffer_size);
+        auto buffer = buffer_array.get_data();
+
+        // count nnz
+        IndexType c_nnz{};
+        hipsparse::spgemm_nnz(
+            handle, m, n, k, a_descr, a_nnz, a_row_ptrs, a_col_idxs, b_descr,
+            b_nnz, b_row_ptrs, b_col_idxs, d_descr, zero_nnz, null_index,
+            null_index, c_descr, c_row_ptrs, &c_nnz, info, buffer);
+
+        // accumulate non-zeros
+        c_col_idxs_array.resize_and_reset(c_nnz);
+        c_vals_array.resize_and_reset(c_nnz);
+        auto c_col_idxs = c_col_idxs_array.get_data();
+        auto c_vals = c_vals_array.get_data();
+        hipsparse::spgemm(handle, m, n, k, &alpha, a_descr, a_nnz, a_vals,
+                          a_row_ptrs, a_col_idxs, b_descr, b_nnz, b_vals,
+                          b_row_ptrs, b_col_idxs, null_value, d_descr, zero_nnz,
+                          null_value, null_index, null_index, c_descr, c_vals,
+                          c_row_ptrs, c_col_idxs, info, buffer);
+
+        hipsparse::destroy_spgemm_info(info);
+        hipsparse::destroy(d_descr);
+        hipsparse::destroy(c_descr);
+        hipsparse::destroy(b_descr);
+        hipsparse::destroy(a_descr);
+    } else {
+        GKO_NOT_IMPLEMENTED;
+    }
+}
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(GKO_DECLARE_CSR_SPGEMM_KERNEL);
 
@@ -464,9 +530,108 @@ void advanced_spgemm(std::shared_ptr<const HipExecutor> exec,
                      const matrix::Csr<ValueType, IndexType> *a,
                      const matrix::Csr<ValueType, IndexType> *b,
                      const matrix::Dense<ValueType> *beta,
-                     const matrix::Csr<ValueType, IndexType> *c,
-                     Array<IndexType> &c_row_ptrs, Array<IndexType> &c_col_idxs,
-                     Array<ValueType> &c_vals) GKO_NOT_IMPLEMENTED;
+                     const matrix::Csr<ValueType, IndexType> *d,
+                     matrix::Csr<ValueType, IndexType> *c)
+{
+    if (hipsparse::is_supported<ValueType, IndexType>::value) {
+        auto handle = exec->get_hipsparse_handle();
+        hipsparse::pointer_mode_guard pm_guard(handle);
+        auto a_descr = hipsparse::create_mat_descr();
+        auto b_descr = hipsparse::create_mat_descr();
+        auto c_descr = hipsparse::create_mat_descr();
+        auto d_descr = hipsparse::create_mat_descr();
+        auto info = hipsparse::create_spgemm_info();
+
+        ValueType valpha{};
+        exec->get_master()->copy_from(exec.get(), 1, alpha->get_const_values(),
+                                      &valpha);
+        auto a_nnz = IndexType(a->get_num_stored_elements());
+        auto a_vals = a->get_const_values();
+        auto a_row_ptrs = a->get_const_row_ptrs();
+        auto a_col_idxs = a->get_const_col_idxs();
+        auto b_nnz = IndexType(b->get_num_stored_elements());
+        auto b_vals = b->get_const_values();
+        auto b_row_ptrs = b->get_const_row_ptrs();
+        auto b_col_idxs = b->get_const_col_idxs();
+        auto d_vals = d->get_const_values();
+        auto d_row_ptrs = d->get_const_row_ptrs();
+        auto d_col_idxs = d->get_const_col_idxs();
+        auto null_value = static_cast<ValueType *>(nullptr);
+        auto null_index = static_cast<IndexType *>(nullptr);
+        auto m = IndexType(a->get_size()[0]);
+        auto n = IndexType(b->get_size()[1]);
+        auto k = IndexType(a->get_size()[1]);
+        auto c_row_ptrs = c->get_row_ptrs();
+        matrix::CsrBuilder<ValueType, IndexType> c_builder{c};
+        auto &c_col_idxs_array = c_builder.get_col_idx_array();
+        auto &c_vals_array = c_builder.get_value_array();
+
+        // allocate buffer
+        size_type buffer_size{};
+        hipsparse::spgemm_buffer_size(
+            handle, m, n, k, &valpha, a_descr, a_nnz, a_row_ptrs, a_col_idxs,
+            b_descr, b_nnz, b_row_ptrs, b_col_idxs, null_value, d_descr,
+            IndexType(0), null_index, null_index, info, buffer_size);
+        Array<char> buffer_array(exec, buffer_size);
+        auto buffer = buffer_array.get_data();
+
+        // count nnz
+        Array<IndexType> c_tmp_row_ptrs_array(exec, m + 1);
+        auto c_tmp_row_ptrs = c_tmp_row_ptrs_array.get_data();
+        IndexType c_nnz{};
+        hipsparse::spgemm_nnz(
+            handle, m, n, k, a_descr, a_nnz, a_row_ptrs, a_col_idxs, b_descr,
+            b_nnz, b_row_ptrs, b_col_idxs, d_descr, IndexType(0), null_index,
+            null_index, c_descr, c_tmp_row_ptrs, &c_nnz, info, buffer);
+
+        // accumulate non-zeros for alpha * A * B
+        Array<IndexType> c_tmp_col_idxs_array(exec, c_nnz);
+        Array<ValueType> c_tmp_vals_array(exec, c_nnz);
+        auto c_tmp_col_idxs = c_tmp_col_idxs_array.get_data();
+        auto c_tmp_vals = c_tmp_vals_array.get_data();
+        hipsparse::spgemm(handle, m, n, k, &valpha, a_descr, a_nnz, a_vals,
+                          a_row_ptrs, a_col_idxs, b_descr, b_nnz, b_vals,
+                          b_row_ptrs, b_col_idxs, null_value, d_descr,
+                          IndexType(0), null_value, null_index, null_index,
+                          c_descr, c_tmp_vals, c_tmp_row_ptrs, c_tmp_col_idxs,
+                          info, buffer);
+
+        // destroy hipsparse context
+        hipsparse::destroy_spgemm_info(info);
+        hipsparse::destroy(d_descr);
+        hipsparse::destroy(c_descr);
+        hipsparse::destroy(b_descr);
+        hipsparse::destroy(a_descr);
+
+        // count nnz for alpha * A * B + beta * D
+        auto num_blocks = ceildiv(m, default_block_size);
+        hipLaunchKernelGGL(HIP_KERNEL_NAME(kernel::spgeam_nnz),
+                           dim3(num_blocks), dim3(default_block_size), 0, 0,
+                           c_tmp_row_ptrs, c_tmp_col_idxs, d_row_ptrs,
+                           d_col_idxs, m, c_row_ptrs);
+
+        // build row pointers
+        prefix_sum(exec, c_row_ptrs, m + 1);
+
+        // accumulate non-zeros for alpha * A * B + beta * D
+        ValueType vbeta{};
+        exec->get_master()->copy_from(exec.get(), 1, beta->get_const_values(),
+                                      &vbeta);
+        exec->get_master()->copy_from(exec.get(), 1, c_row_ptrs + m, &c_nnz);
+        c_col_idxs_array.resize_and_reset(c_nnz);
+        c_vals_array.resize_and_reset(c_nnz);
+        auto c_col_idxs = c_col_idxs_array.get_data();
+        auto c_vals = c_vals_array.get_data();
+        hipLaunchKernelGGL(
+            HIP_KERNEL_NAME(kernel::spgeam), dim3(num_blocks),
+            dim3(default_block_size), 0, 0, as_hip_type(one<ValueType>()),
+            c_tmp_row_ptrs, c_tmp_col_idxs, as_hip_type(c_tmp_vals),
+            as_hip_type(vbeta), d_row_ptrs, d_col_idxs, as_hip_type(d_vals), m,
+            c_row_ptrs, c_col_idxs, as_hip_type(c_vals));
+    } else {
+        GKO_NOT_IMPLEMENTED;
+    }
+}
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
     GKO_DECLARE_CSR_ADVANCED_SPGEMM_KERNEL);
@@ -573,19 +738,7 @@ void convert_to_sellp(std::shared_ptr<const HipExecutor> exec,
                        stride_factor, as_hip_type(nnz_per_row.get_const_data()),
                        as_hip_type(slice_lengths), as_hip_type(slice_sets));
 
-    auto add_values =
-        Array<size_type>(exec, ceildiv(slice_num + 1, default_block_size));
-    grid_dim = ceildiv(slice_num + 1, default_block_size);
-
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(start_prefix_sum<default_block_size>),
-                       dim3(grid_dim), dim3(default_block_size), 0, 0,
-                       slice_num + 1, as_hip_type(slice_sets),
-                       as_hip_type(add_values.get_data()));
-
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(finalize_prefix_sum<default_block_size>),
-                       dim3(grid_dim), dim3(default_block_size), 0, 0,
-                       slice_num + 1, as_hip_type(slice_sets),
-                       as_hip_type(add_values.get_const_data()));
+    prefix_sum(exec, slice_sets, slice_num + 1);
 
     grid_dim = ceildiv(num_rows, default_block_size);
     hipLaunchKernelGGL(kernel::fill_in_sellp, dim3(grid_dim),
@@ -594,9 +747,6 @@ void convert_to_sellp(std::shared_ptr<const HipExecutor> exec,
                        as_hip_type(source_col_idxs), as_hip_type(slice_lengths),
                        as_hip_type(slice_sets), as_hip_type(result_col_idxs),
                        as_hip_type(result_values));
-
-    nnz_per_row.clear();
-    add_values.clear();
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
@@ -684,11 +834,6 @@ void calculate_total_cols(std::shared_ptr<const HipExecutor> exec,
 
     exec->get_master()->copy_from(exec.get(), 1, d_result.get_const_data(),
                                   result);
-
-    block_results.clear();
-    nnz_per_row.clear();
-    max_nnz_per_slice.clear();
-    d_result.clear();
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
@@ -825,10 +970,6 @@ void calculate_max_nnz_per_row(std::shared_ptr<const HipExecutor> exec,
 
     exec->get_master()->copy_from(exec.get(), 1, d_result.get_const_data(),
                                   result);
-
-    nnz_per_row.clear();
-    block_results.clear();
-    d_result.clear();
 }
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
@@ -863,17 +1004,7 @@ void convert_to_hybrid(std::shared_ptr<const HipExecutor> exec,
                        as_hip_type(source->get_const_row_ptrs()),
                        as_hip_type(coo_offset.get_data()));
 
-    auto add_values =
-        Array<size_type>(exec, ceildiv(num_rows, default_block_size));
-    grid_dim = ceildiv(num_rows, default_block_size);
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(start_prefix_sum<default_block_size>),
-                       dim3(grid_dim), dim3(default_block_size), 0, 0, num_rows,
-                       as_hip_type(coo_offset.get_data()),
-                       as_hip_type(add_values.get_data()));
-    hipLaunchKernelGGL(HIP_KERNEL_NAME(finalize_prefix_sum<default_block_size>),
-                       dim3(grid_dim), dim3(default_block_size), 0, 0, num_rows,
-                       as_hip_type(coo_offset.get_data()),
-                       as_hip_type(add_values.get_const_data()));
+    prefix_sum(exec, coo_offset.get_data(), num_rows);
 
     grid_dim = ceildiv(num_rows * config::warp_size, default_block_size);
     hipLaunchKernelGGL(kernel::fill_in_hybrid, dim3(grid_dim),
@@ -912,7 +1043,46 @@ GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
 template <typename ValueType, typename IndexType>
 void sort_by_column_index(std::shared_ptr<const HipExecutor> exec,
                           matrix::Csr<ValueType, IndexType> *to_sort)
-    GKO_NOT_IMPLEMENTED;
+{
+    if (hipsparse::is_supported<ValueType, IndexType>::value) {
+        auto handle = exec->get_hipsparse_handle();
+        auto descr = hipsparse::create_mat_descr();
+        auto m = IndexType(to_sort->get_size()[0]);
+        auto n = IndexType(to_sort->get_size()[1]);
+        auto nnz = IndexType(to_sort->get_num_stored_elements());
+        auto row_ptrs = to_sort->get_const_row_ptrs();
+        auto col_idxs = to_sort->get_col_idxs();
+        auto vals = to_sort->get_values();
+
+        // copy values
+        Array<ValueType> tmp_vals_array(exec, nnz);
+        exec->copy_from(exec.get(), nnz, vals, tmp_vals_array.get_data());
+        auto tmp_vals = tmp_vals_array.get_const_data();
+
+        // init identity permutation
+        Array<IndexType> permutation_array(exec, nnz);
+        auto permutation = permutation_array.get_data();
+        hipsparse::create_identity_permutation(handle, nnz, permutation);
+
+        // allocate buffer
+        size_type buffer_size{};
+        hipsparse::csrsort_buffer_size(handle, m, n, nnz, row_ptrs, col_idxs,
+                                       buffer_size);
+        Array<char> buffer_array{exec, buffer_size};
+        auto buffer = buffer_array.get_data();
+
+        // sort column indices
+        hipsparse::csrsort(handle, m, n, nnz, descr, row_ptrs, col_idxs,
+                           permutation, buffer);
+
+        // sort values
+        hipsparse::gather(handle, nnz, tmp_vals, vals, permutation);
+
+        hipsparse::destroy(descr);
+    } else {
+        GKO_NOT_IMPLEMENTED;
+    }
+}
 
 GKO_INSTANTIATE_FOR_EACH_VALUE_AND_INDEX_TYPE(
     GKO_DECLARE_CSR_SORT_BY_COLUMN_INDEX);

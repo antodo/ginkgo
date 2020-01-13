@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -63,6 +63,9 @@ class SparsityCsr;
 template <typename ValueType, typename IndexType>
 class Csr;
 
+template <typename ValueType, typename IndexType>
+class CsrBuilder;
+
 
 namespace detail {
 
@@ -111,6 +114,7 @@ class Csr : public EnableLinOp<Csr<ValueType, IndexType>>,
     friend class Hybrid<ValueType, IndexType>;
     friend class Sellp<ValueType, IndexType>;
     friend class SparsityCsr<ValueType, IndexType>;
+    friend class CsrBuilder<ValueType, IndexType>;
 
 public:
     using value_type = ValueType;

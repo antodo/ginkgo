@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -53,6 +53,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 
 #include "core/base/iterator_factory.hpp"
+#include "core/components/prefix_sum.hpp"
+#include "core/matrix/csr_builder.hpp"
 #include "omp/components/format_conversion.hpp"
 
 
@@ -208,29 +210,29 @@ template <typename ValueType, typename IndexType>
 void spgemm(std::shared_ptr<const OmpExecutor> exec,
             const matrix::Csr<ValueType, IndexType> *a,
             const matrix::Csr<ValueType, IndexType> *b,
-            Array<IndexType> &c_row_ptrs_array,
-            Array<IndexType> &c_col_idxs_array, Array<ValueType> &c_vals_array)
+            matrix::Csr<ValueType, IndexType> *c)
 {
     auto num_rows = a->get_size()[0];
 
     // first sweep: count nnz for each row
-    c_row_ptrs_array.resize_and_reset(num_rows + 1);
-    auto c_row_ptrs = c_row_ptrs_array.get_data();
+    auto c_row_ptrs = c->get_row_ptrs();
 
     std::unordered_set<IndexType> local_col_idxs;
 #pragma omp parallel for firstprivate(local_col_idxs)
     for (size_type a_row = 0; a_row < num_rows; ++a_row) {
         local_col_idxs.clear();
         spgemm_insert_row2(local_col_idxs, a, b, a_row);
-        c_row_ptrs[a_row + 1] = local_col_idxs.size();
+        c_row_ptrs[a_row] = local_col_idxs.size();
     }
 
-    // build row pointers: exclusive scan (thus the + 1)
-    c_row_ptrs[0] = 0;
-    std::partial_sum(c_row_ptrs + 1, c_row_ptrs + num_rows + 1, c_row_ptrs + 1);
+    // build row pointers
+    prefix_sum(exec, c_row_ptrs, num_rows + 1);
 
     // second sweep: accumulate non-zeros
     auto new_nnz = c_row_ptrs[num_rows];
+    matrix::CsrBuilder<ValueType, IndexType> c_builder{c};
+    auto &c_col_idxs_array = c_builder.get_col_idx_array();
+    auto &c_vals_array = c_builder.get_value_array();
     c_col_idxs_array.resize_and_reset(new_nnz);
     c_vals_array.resize_and_reset(new_nnz);
     auto c_col_idxs = c_col_idxs_array.get_data();
@@ -260,38 +262,37 @@ void advanced_spgemm(std::shared_ptr<const OmpExecutor> exec,
                      const matrix::Csr<ValueType, IndexType> *a,
                      const matrix::Csr<ValueType, IndexType> *b,
                      const matrix::Dense<ValueType> *beta,
-                     const matrix::Csr<ValueType, IndexType> *c,
-                     Array<IndexType> &c_row_ptrs_array,
-                     Array<IndexType> &c_col_idxs_array,
-                     Array<ValueType> &c_vals_array)
+                     const matrix::Csr<ValueType, IndexType> *d,
+                     matrix::Csr<ValueType, IndexType> *c)
 {
     auto num_rows = a->get_size()[0];
     auto valpha = alpha->at(0, 0);
     auto vbeta = beta->at(0, 0);
 
     // first sweep: count nnz for each row
-    c_row_ptrs_array.resize_and_reset(num_rows + 1);
-    auto c_row_ptrs = c_row_ptrs_array.get_data();
+    auto c_row_ptrs = c->get_row_ptrs();
 
     std::unordered_set<IndexType> local_col_idxs;
 #pragma omp parallel for firstprivate(local_col_idxs)
     for (size_type a_row = 0; a_row < num_rows; ++a_row) {
         local_col_idxs.clear();
         if (vbeta != zero(vbeta)) {
-            spgemm_insert_row(local_col_idxs, c, a_row);
+            spgemm_insert_row(local_col_idxs, d, a_row);
         }
         if (valpha != zero(valpha)) {
             spgemm_insert_row2(local_col_idxs, a, b, a_row);
         }
-        c_row_ptrs[a_row + 1] = local_col_idxs.size();
+        c_row_ptrs[a_row] = local_col_idxs.size();
     }
 
-    // build row pointers: exclusive scan (thus the + 1)
-    c_row_ptrs[0] = 0;
-    std::partial_sum(c_row_ptrs + 1, c_row_ptrs + num_rows + 1, c_row_ptrs + 1);
+    // build row pointers
+    prefix_sum(exec, c_row_ptrs, num_rows + 1);
 
     // second sweep: accumulate non-zeros
     auto new_nnz = c_row_ptrs[num_rows];
+    matrix::CsrBuilder<ValueType, IndexType> c_builder{c};
+    auto &c_col_idxs_array = c_builder.get_col_idx_array();
+    auto &c_vals_array = c_builder.get_value_array();
     c_col_idxs_array.resize_and_reset(new_nnz);
     c_vals_array.resize_and_reset(new_nnz);
     auto c_col_idxs = c_col_idxs_array.get_data();
@@ -302,7 +303,7 @@ void advanced_spgemm(std::shared_ptr<const OmpExecutor> exec,
     for (size_type a_row = 0; a_row < num_rows; ++a_row) {
         local_row_nzs.clear();
         if (vbeta != zero(vbeta)) {
-            spgemm_accumulate_row(local_row_nzs, c, vbeta, a_row);
+            spgemm_accumulate_row(local_row_nzs, d, vbeta, a_row);
         }
         if (valpha != zero(valpha)) {
             spgemm_accumulate_row2(local_row_nzs, a, b, valpha, a_row);

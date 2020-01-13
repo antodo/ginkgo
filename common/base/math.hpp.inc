@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -173,3 +173,13 @@ using ::isfinite;
 
 
 #endif  // defined(__CUDA_ARCH__) || __HIP_DEVICE_COMPILE__
+
+
+// We need this struct, because otherwise we would call a __host__ function in a
+// __device__ function (even though it is constexpr)
+template <typename T>
+struct device_numeric_limits {
+    static constexpr auto inf = std::numeric_limits<T>::infinity();
+    static constexpr auto max = std::numeric_limits<T>::max();
+    static constexpr auto min = std::numeric_limits<T>::min();
+};

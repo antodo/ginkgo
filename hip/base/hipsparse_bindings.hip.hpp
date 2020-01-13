@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -187,6 +187,137 @@ GKO_BIND_HIPSPARSE32_SPMV(ValueType, detail::not_implemented);
 
 
 #undef GKO_BIND_HIPSPARSE32_SPMV
+
+
+template <typename IndexType, typename ValueType>
+void spgemm_buffer_size(
+    hipsparseHandle_t handle, IndexType m, IndexType n, IndexType k,
+    const ValueType *alpha, const hipsparseMatDescr_t descrA, IndexType nnzA,
+    const IndexType *csrRowPtrA, const IndexType *csrColIndA,
+    const hipsparseMatDescr_t descrB, IndexType nnzB,
+    const IndexType *csrRowPtrB, const IndexType *csrColIndB,
+    const ValueType *beta, const hipsparseMatDescr_t descrD, IndexType nnzD,
+    const IndexType *csrRowPtrD, const IndexType *csrColIndD,
+    csrgemm2Info_t info, size_type &result) GKO_NOT_IMPLEMENTED;
+
+#define GKO_BIND_HIPSPARSE_SPGEMM_BUFFER_SIZE(ValueType, HipsparseName)        \
+    template <>                                                                \
+    inline void spgemm_buffer_size<int32, ValueType>(                          \
+        hipsparseHandle_t handle, int32 m, int32 n, int32 k,                   \
+        const ValueType *alpha, const hipsparseMatDescr_t descrA, int32 nnzA,  \
+        const int32 *csrRowPtrA, const int32 *csrColIndA,                      \
+        const hipsparseMatDescr_t descrB, int32 nnzB, const int32 *csrRowPtrB, \
+        const int32 *csrColIndB, const ValueType *beta,                        \
+        const hipsparseMatDescr_t descrD, int32 nnzD, const int32 *csrRowPtrD, \
+        const int32 *csrColIndD, csrgemm2Info_t info, size_type &result)       \
+    {                                                                          \
+        GKO_ASSERT_NO_HIPSPARSE_ERRORS(HipsparseName(                          \
+            handle, m, n, k, as_hiplibs_type(alpha), descrA, nnzA, csrRowPtrA, \
+            csrColIndA, descrB, nnzB, csrRowPtrB, csrColIndB,                  \
+            as_hiplibs_type(beta), descrD, nnzD, csrRowPtrD, csrColIndD, info, \
+            &result));                                                         \
+    }                                                                          \
+    static_assert(true,                                                        \
+                  "This assert is used to counter the false positive extra "   \
+                  "semi-colon warnings")
+
+GKO_BIND_HIPSPARSE_SPGEMM_BUFFER_SIZE(float, hipsparseScsrgemm2_bufferSizeExt);
+GKO_BIND_HIPSPARSE_SPGEMM_BUFFER_SIZE(double, hipsparseDcsrgemm2_bufferSizeExt);
+#if defined(hipsparseVersionMajor) && defined(hipsparseVersionMinor) && \
+    ((hipsparseVersionMajor > 1) ||                                     \
+     (hipsparseVersionMajor == 1 && hipsparseVersionMinor >= 4))
+GKO_BIND_HIPSPARSE_SPGEMM_BUFFER_SIZE(std::complex<float>,
+                                      hipsparseCcsrgemm2_bufferSizeExt);
+GKO_BIND_HIPSPARSE_SPGEMM_BUFFER_SIZE(std::complex<double>,
+                                      hipsparseZcsrgemm2_bufferSizeExt);
+#endif  // hipsparse version >= 1.4
+
+
+#undef GKO_BIND_HIPSPARSE_SPGEMM_BUFFER_SIZE
+
+
+template <typename IndexType>
+void spgemm_nnz(hipsparseHandle_t handle, IndexType m, IndexType n, IndexType k,
+                const hipsparseMatDescr_t descrA, IndexType nnzA,
+                const IndexType *csrRowPtrA, const IndexType *csrColIndA,
+                const hipsparseMatDescr_t descrB, IndexType nnzB,
+                const IndexType *csrRowPtrB, const IndexType *csrColIndB,
+                const hipsparseMatDescr_t descrD, IndexType nnzD,
+                const IndexType *csrRowPtrD, const IndexType *csrColIndD,
+                const hipsparseMatDescr_t descrC, IndexType *csrRowPtrC,
+                IndexType *nnzC, csrgemm2Info_t info,
+                void *buffer) GKO_NOT_IMPLEMENTED;
+
+template <>
+inline void spgemm_nnz<int32>(
+    hipsparseHandle_t handle, int32 m, int32 n, int32 k,
+    const hipsparseMatDescr_t descrA, int32 nnzA, const int32 *csrRowPtrA,
+    const int32 *csrColIndA, const hipsparseMatDescr_t descrB, int32 nnzB,
+    const int32 *csrRowPtrB, const int32 *csrColIndB,
+    const hipsparseMatDescr_t descrD, int32 nnzD, const int32 *csrRowPtrD,
+    const int32 *csrColIndD, const hipsparseMatDescr_t descrC,
+    int32 *csrRowPtrC, int32 *nnzC, csrgemm2Info_t info, void *buffer)
+{
+    GKO_ASSERT_NO_HIPSPARSE_ERRORS(hipsparseXcsrgemm2Nnz(
+        handle, m, n, k, descrA, nnzA, csrRowPtrA, csrColIndA, descrB, nnzB,
+        csrRowPtrB, csrColIndB, descrD, nnzD, csrRowPtrD, csrColIndD, descrC,
+        csrRowPtrC, nnzC, info, buffer));
+}
+
+
+template <typename IndexType, typename ValueType>
+void spgemm(hipsparseHandle_t handle, IndexType m, IndexType n, IndexType k,
+            const ValueType *alpha, const hipsparseMatDescr_t descrA,
+            IndexType nnzA, const ValueType *csrValA,
+            const IndexType *csrRowPtrA, const IndexType *csrColIndA,
+            const hipsparseMatDescr_t descrB, IndexType nnzB,
+            const ValueType *csrValB, const IndexType *csrRowPtrB,
+            const IndexType *csrColIndB, const ValueType *beta,
+            const hipsparseMatDescr_t descrD, IndexType nnzD,
+            const ValueType *csrValD, const IndexType *csrRowPtrD,
+            const IndexType *csrColIndD, const hipsparseMatDescr_t descrC,
+            ValueType *csrValC, const IndexType *csrRowPtrC,
+            IndexType *csrColIndC, csrgemm2Info_t info,
+            void *buffer) GKO_NOT_IMPLEMENTED;
+
+#define GKO_BIND_HIPSPARSE_SPGEMM(ValueType, HipsparseName)                    \
+    template <>                                                                \
+    inline void spgemm<int32, ValueType>(                                      \
+        hipsparseHandle_t handle, int32 m, int32 n, int32 k,                   \
+        const ValueType *alpha, const hipsparseMatDescr_t descrA, int32 nnzA,  \
+        const ValueType *csrValA, const int32 *csrRowPtrA,                     \
+        const int32 *csrColIndA, const hipsparseMatDescr_t descrB, int32 nnzB, \
+        const ValueType *csrValB, const int32 *csrRowPtrB,                     \
+        const int32 *csrColIndB, const ValueType *beta,                        \
+        const hipsparseMatDescr_t descrD, int32 nnzD,                          \
+        const ValueType *csrValD, const int32 *csrRowPtrD,                     \
+        const int32 *csrColIndD, const hipsparseMatDescr_t descrC,             \
+        ValueType *csrValC, const int32 *csrRowPtrC, int32 *csrColIndC,        \
+        csrgemm2Info_t info, void *buffer)                                     \
+    {                                                                          \
+        GKO_ASSERT_NO_HIPSPARSE_ERRORS(HipsparseName(                          \
+            handle, m, n, k, as_hiplibs_type(alpha), descrA, nnzA,             \
+            as_hiplibs_type(csrValA), csrRowPtrA, csrColIndA, descrB, nnzB,    \
+            as_hiplibs_type(csrValB), csrRowPtrB, csrColIndB,                  \
+            as_hiplibs_type(beta), descrD, nnzD, as_hiplibs_type(csrValD),     \
+            csrRowPtrD, csrColIndD, descrC, as_hiplibs_type(csrValC),          \
+            csrRowPtrC, csrColIndC, info, buffer));                            \
+    }                                                                          \
+    static_assert(true,                                                        \
+                  "This assert is used to counter the false positive extra "   \
+                  "semi-colon warnings")
+
+GKO_BIND_HIPSPARSE_SPGEMM(float, hipsparseScsrgemm2);
+GKO_BIND_HIPSPARSE_SPGEMM(double, hipsparseDcsrgemm2);
+#if defined(hipsparseVersionMajor) && defined(hipsparseVersionMinor) && \
+    ((hipsparseVersionMajor > 1) ||                                     \
+     (hipsparseVersionMajor == 1 && hipsparseVersionMinor >= 4))
+GKO_BIND_HIPSPARSE_SPGEMM(std::complex<float>, hipsparseCcsrgemm2);
+GKO_BIND_HIPSPARSE_SPGEMM(std::complex<double>, hipsparseZcsrgemm2);
+#endif  // hipsparse version >= 1.4
+
+
+#undef GKO_BIND_HIPSPARSE_SPGEMM
 
 
 #define GKO_BIND_HIPSPARSE32_CSR2HYB(ValueType, HipsparseName)               \
@@ -455,6 +586,98 @@ inline void destroy(hipsparseMatDescr_t descr)
 {
     GKO_ASSERT_NO_HIPSPARSE_ERRORS(hipsparseDestroyMatDescr(descr));
 }
+
+
+inline csrgemm2Info_t create_spgemm_info()
+{
+    csrgemm2Info_t info{};
+    GKO_ASSERT_NO_HIPSPARSE_ERRORS(hipsparseCreateCsrgemm2Info(&info));
+    return info;
+}
+
+
+inline void destroy_spgemm_info(csrgemm2Info_t info)
+{
+    GKO_ASSERT_NO_HIPSPARSE_ERRORS(hipsparseDestroyCsrgemm2Info(info));
+}
+
+
+template <typename IndexType>
+void create_identity_permutation(hipsparseHandle_t handle, IndexType size,
+                                 IndexType *permutation) GKO_NOT_IMPLEMENTED;
+
+template <>
+inline void create_identity_permutation<int32>(hipsparseHandle_t handle,
+                                               int32 size, int32 *permutation)
+{
+    GKO_ASSERT_NO_HIPSPARSE_ERRORS(
+        hipsparseCreateIdentityPermutation(handle, size, permutation));
+}
+
+
+template <typename IndexType>
+void csrsort_buffer_size(hipsparseHandle_t handle, IndexType m, IndexType n,
+                         IndexType nnz, const IndexType *row_ptrs,
+                         const IndexType *col_idxs,
+                         size_type &buffer_size) GKO_NOT_IMPLEMENTED;
+
+template <>
+inline void csrsort_buffer_size<int32>(hipsparseHandle_t handle, int32 m,
+                                       int32 n, int32 nnz,
+                                       const int32 *row_ptrs,
+                                       const int32 *col_idxs,
+                                       size_type &buffer_size)
+{
+    GKO_ASSERT_NO_HIPSPARSE_ERRORS(hipsparseXcsrsort_bufferSizeExt(
+        handle, m, n, nnz, row_ptrs, col_idxs, &buffer_size));
+}
+
+
+template <typename IndexType>
+void csrsort(hipsparseHandle_t handle, IndexType m, IndexType n, IndexType nnz,
+             const hipsparseMatDescr_t descr, const IndexType *row_ptrs,
+             IndexType *col_idxs, IndexType *permutation,
+             void *buffer) GKO_NOT_IMPLEMENTED;
+
+template <>
+inline void csrsort<int32>(hipsparseHandle_t handle, int32 m, int32 n,
+                           int32 nnz, const hipsparseMatDescr_t descr,
+                           const int32 *row_ptrs, int32 *col_idxs,
+                           int32 *permutation, void *buffer)
+{
+    GKO_ASSERT_NO_HIPSPARSE_ERRORS(hipsparseXcsrsort(
+        handle, m, n, nnz, descr, row_ptrs, col_idxs, permutation, buffer));
+}
+
+
+template <typename IndexType, typename ValueType>
+void gather(hipsparseHandle_t handle, IndexType nnz, const ValueType *in,
+            ValueType *out, const IndexType *permutation) GKO_NOT_IMPLEMENTED;
+
+#define GKO_BIND_HIPSPARSE_GATHER(ValueType, HipsparseName)                   \
+    template <>                                                               \
+    inline void gather<int32, ValueType>(hipsparseHandle_t handle, int32 nnz, \
+                                         const ValueType *in, ValueType *out, \
+                                         const int32 *permutation)            \
+    {                                                                         \
+        GKO_ASSERT_NO_HIPSPARSE_ERRORS(HipsparseName(                         \
+            handle, nnz, as_hiplibs_type(in), as_hiplibs_type(out),           \
+            permutation, HIPSPARSE_INDEX_BASE_ZERO));                         \
+    }                                                                         \
+    static_assert(true,                                                       \
+                  "This assert is used to counter the false positive extra "  \
+                  "semi-colon warnings")
+
+GKO_BIND_HIPSPARSE_GATHER(float, hipsparseSgthr);
+GKO_BIND_HIPSPARSE_GATHER(double, hipsparseDgthr);
+#if defined(hipsparseVersionMajor) && defined(hipsparseVersionMinor) && \
+    ((hipsparseVersionMajor > 1) ||                                     \
+     (hipsparseVersionMajor == 1 && hipsparseVersionMinor >= 4))
+GKO_BIND_HIPSPARSE_GATHER(std::complex<float>, hipsparseCgthr);
+GKO_BIND_HIPSPARSE_GATHER(std::complex<double>, hipsparseZgthr);
+#endif  // hipsparse version >= 1.4
+
+#undef GKO_BIND_HIPSPARSE_GATHER
 
 
 }  // namespace hipsparse

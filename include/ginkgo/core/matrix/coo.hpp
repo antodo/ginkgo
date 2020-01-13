@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -55,6 +55,10 @@ template <typename ValueType>
 class Dense;
 
 
+template <typename ValueType, typename IndexType>
+class CooBuilder;
+
+
 /**
  * COO stores a matrix in the coordinate matrix format.
  *
@@ -80,6 +84,7 @@ class Coo : public EnableLinOp<Coo<ValueType, IndexType>>,
     friend class EnablePolymorphicObject<Coo, LinOp>;
     friend class Csr<ValueType, IndexType>;
     friend class Dense<ValueType>;
+    friend class CooBuilder<ValueType, IndexType>;
 
 public:
     using EnableLinOp<Coo>::convert_to;

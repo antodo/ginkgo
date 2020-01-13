@@ -1,5 +1,5 @@
 /*******************************<GINKGO LICENSE>******************************
-Copyright (c) 2017-2019, the Ginkgo authors
+Copyright (c) 2017-2020, the Ginkgo authors
 All rights reserved.
 
 Redistribution and use in source and binary forms, with or without
@@ -38,6 +38,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ginkgo/core/matrix/csr.hpp>
 
 
+#include "core/components/prefix_sum.hpp"
+
+
 namespace gko {
 namespace kernels {
 namespace reference {
@@ -74,8 +77,10 @@ void initialize_row_ptrs_l_u(
             }
             has_diagonal |= col == row;
         }
-        l_row_ptrs[row + 1] = l_nnz + !has_diagonal;
-        u_row_ptrs[row + 1] = u_nnz + !has_diagonal;
+        l_nnz += !has_diagonal;
+        u_nnz += !has_diagonal;
+        l_row_ptrs[row + 1] = l_nnz;
+        u_row_ptrs[row + 1] = u_nnz;
     }
 }
 
