@@ -30,8 +30,8 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
-#ifndef GKO_CORE_STD_EXTENSIONS_HPP_
-#define GKO_CORE_STD_EXTENSIONS_HPP_
+#ifndef GKO_CORE_BASE_STD_EXTENSIONS_HPP_
+#define GKO_CORE_BASE_STD_EXTENSIONS_HPP_
 
 
 #include <memory>
@@ -83,4 +83,4 @@ using decay_t = typename std::decay<T>::type;
 }  // namespace gko
 
 
-#endif  // GKO_CORE_STD_EXTENSIONS_HPP_
+#endif  // GKO_CORE_BASE_STD_EXTENSIONS_HPP_
