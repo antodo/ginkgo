@@ -33,15 +33,17 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <ginkgo/core/preconditioner/jacobi.hpp>
 
 
-#include <gtest/gtest.h>
-
-
 #include <random>
 
 
-#include <core/test/utils.hpp>
+#include <gtest/gtest.h>
+
+
 #include <ginkgo/core/matrix/csr.hpp>
 #include <ginkgo/core/matrix/dense.hpp>
+
+
+#include "core/test/utils.hpp"
 
 
 namespace {
