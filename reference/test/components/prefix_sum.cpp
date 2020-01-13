@@ -30,15 +30,15 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
+#include "core/components/prefix_sum.hpp"
+
+
 #include <algorithm>
 #include <memory>
 #include <vector>
 
 
 #include <gtest/gtest.h>
-
-
-#include "core/components/prefix_sum.hpp"
 
 
 namespace {

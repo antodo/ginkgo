@@ -30,10 +30,10 @@ THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
 OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 ******************************<GINKGO LICENSE>*******************************/
 
-#include "cuda/components/prefix_sum.cuh"
-
-
 #include "core/components/prefix_sum.hpp"
+
+
+#include "cuda/components/prefix_sum.cuh"
 
 
 namespace gko {
