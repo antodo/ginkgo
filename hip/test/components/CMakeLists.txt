@@ -1,2 +1,2 @@
 ginkgo_create_hip_test(prefix_sum)
-ginkgo_create_hip_test(sorting)
+ginkgo_create_hip_test(sorting_kernels)
